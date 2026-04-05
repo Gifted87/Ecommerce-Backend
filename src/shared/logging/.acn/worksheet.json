@@ -1,0 +1,32 @@
+{
+  "shared_logger": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "BAC29C3C09F0AB22222AD6A6B6F559E8F711ED6D3A8F64E2CA57A759CC58DD60",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Centralized logging subsystem providing structured, performance-optimized, and secure JSON logging for the ecommerce backend.",
+      "filename": "index.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/shared/logging/index.ts",
+      "id": "e571ee88-a450-4c18-b6a4-80ae5ab6a85d",
+      "provenance_data": {
+        "behaviour": "Implements a production-grade, structured, and asynchronous logging subsystem using the 'pino' library. Configures automatic PII redaction, standard formatting, and context-enrichment for auditability and debugging. Uses singleton pattern for the global logger and provides a factory for module-specific loggers.",
+        "interfaces": [
+          "createLogger(context: LogContext): Logger",
+          "default: Logger"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides consistent, secure, and production-ready observability across all microservices, facilitating debugging, auditing, and operational monitoring."
+      },
+      "source_code": "import pino, { Logger, LoggerOptions } from 'pino';\n\n/**\n * @fileoverview Centralized logging subsystem for the ecommerce backend.\n * Utilizes pino for high-performance, asynchronous, structured JSON logging.\n * Implements singleton pattern and redaction for PII protection.\n */\n\n/**\n * Sensitive fields to be redacted from all log entries.\n */\nconst REDACTED_KEYS = [\n  'password',\n  'credit_card',\n  'authorization',\n  'token',\n  'cookie',\n  'set-cookie',\n  'secret'\n];\n\n/**\n * Configuration for the Pino logger.\n * Uses environment variables to determine log level.\n */\nconst loggerOptions: LoggerOptions = {\n  level: process.env.LOG_LEVEL || 'info',\n  redact: {\n    paths: REDACTED_KEYS,\n    censor: '[REDACTED]'\n  },\n  formatters: {\n    level: (label: string) => ({ level: label }),\n  },\n  timestamp: pino.stdTimeFunctions.isoTime,\n  base: {\n    pid: process.pid,\n    hostname: require('os').hostname(),\n  },\n  errorKey: 'error',\n  serializers: {\n    error: pino.stdSerializers.err,\n  },\n};\n\n/**\n * The core singleton logger instance configured for the application.\n */\nconst rootLogger: Logger = pino(loggerOptions);\n\n/**\n * Interface representing the structure of contextual metadata for logs.\n */\ninterface LogContext {\n  module: string;\n  requestId?: string;\n  userId?: string;\n  [key: string]: any;\n}\n\n/**\n * Creates a child logger with injected context.\n * \n * @param context - The metadata object containing 'module' and optional 'requestId' or 'userId'.\n * @returns A logger instance enriched with the provided context.\n */\nexport const createLogger = (context: LogContext): Logger => {\n  if (!context.module) {\n    throw new Error('Logger context must include a \"module\" property.');\n  }\n  return rootLogger.child(context);\n};\n\n/**\n * Main logger singleton to be used across the application.\n * Note: While it is recommended to use `createLogger` for module tracing,\n * this default export provides a fallback for global logging.\n */\nconst logger: Logger = rootLogger.child({ module: 'global' });\n\nexport default logger;\n",
+      "timestamp": "2026-04-03T22:49:41.166860Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "DD513C5C416167041F84D28382864C32101728AACA222871223ECF95B578E415",
+    "timestamp": 1775256581
+  }
+}

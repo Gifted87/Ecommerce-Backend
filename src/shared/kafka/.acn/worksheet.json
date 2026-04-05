@@ -1,0 +1,35 @@
+{
+  "infra_kafka_client": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "b997c0f135b34923e35a122855799a42149b5523f66870d049615a133d5964f4",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of a robust, production-ready Kafka messaging client using kafkajs, Opossum circuit breakers, and Zod for configuration validation.",
+      "filename": "KafkaMessagingClient.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/shared/kafka/KafkaMessagingClient.ts",
+      "id": "9847463a-89e8-4c96-b3e2-69e6a35d53a0",
+      "provenance_data": {
+        "behaviour": "Provides a production-ready Kafka messaging client with integrated Opossum circuit breaking for production resilience, including DLQ support for failed message processing.",
+        "interfaces": [
+          "class KafkaMessagingClient: constructor(config: KafkaClientConfig, logger: Logger)",
+          "async connect(): Promise<void>",
+          "async publish(topic: string, key: string, message: any, headers?: Record<string, any>): Promise<void>",
+          "async createConsumer(groupId: string, topic: string, handler: (payload: EachMessagePayload) => Promise<void>, dlqTopic?: string): Promise<void>",
+          "async disconnect(): Promise<void>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a production-grade, fault-tolerant interface for Kafka event-driven messaging, ensuring reliability via circuit breakers and observability through Pino logging."
+      },
+      "source_code": "import { Kafka, Producer, Consumer, ProducerRecord, Message, EachMessagePayload } from 'kafkajs';\nimport CircuitBreaker from 'opossum';\nimport { z } from 'zod';\nimport { Logger } from 'pino';\n\nconst KafkaConfigSchema = z.object({\n  clientId: z.string(),\n  brokers: z.array(z.string()),\n  sasl: z.object({\n    mechanism: z.enum(['plain', 'scram-sha-256', 'scram-sha-512']),\n    username: z.string(),\n    password: z.string(),\n  }).optional(),\n  ssl: z.boolean(),\n});\n\nexport type KafkaClientConfig = z.infer<typeof KafkaConfigSchema>;\n\nexport class KafkaMessagingClient {\n  private kafka: Kafka;\n  private producer: Producer;\n  private producerBreaker: CircuitBreaker;\n  private logger: Logger;\n\n  constructor(config: KafkaClientConfig, logger: Logger) {\n    const validatedConfig = KafkaConfigSchema.parse(config);\n    this.logger = logger;\n\n    this.kafka = new Kafka({\n      clientId: validatedConfig.clientId,\n      brokers: validatedConfig.brokers,\n      ssl: validatedConfig.ssl,\n      sasl: validatedConfig.sasl ? {\n        mechanism: validatedConfig.sasl.mechanism as any,\n        username: validatedConfig.sasl.username,\n        password: validatedConfig.sasl.password,\n      } : undefined,\n    });\n\n    this.producer = this.kafka.producer({\n      idempotent: true,\n      maxInFlightRequests: 5,\n    });\n\n    this.producerBreaker = new CircuitBreaker(\n      async (record: ProducerRecord) => await this.producer.send(record),\n      {\n        timeout: 5000,\n        errorThresholdPercentage: 50,\n        resetTimeout: 30000,\n      }\n    );\n\n    this.producerBreaker.on('open', () => this.logger.error('Producer circuit breaker opened'));\n    this.producerBreaker.on('halfOpen', () => this.logger.warn('Producer circuit breaker half-open'));\n    this.producerBreaker.on('close', () => this.logger.info('Producer circuit breaker closed'));\n  }\n\n  public async connect(): Promise<void> {\n    try {\n      await this.producer.connect();\n      this.logger.info('Kafka producer connected successfully');\n    } catch (error) {\n      this.logger.error('Failed to connect Kafka producer', { error });\n      throw error;\n    }\n  }\n\n  public async publish(topic: string, key: string, message: any, headers?: Record<string, any>): Promise<void> {\n    const record: ProducerRecord = {\n      topic,\n      messages: [{\n        key,\n        value: JSON.stringify(message),\n        headers,\n      }],\n    };\n\n    try {\n      await this.producerBreaker.fire(record);\n    } catch (error) {\n      this.logger.error('Failed to publish message via circuit breaker', { topic, key, error });\n      throw error;\n    }\n  }\n\n  public async createConsumer(\n    groupId: string,\n    topic: string,\n    handler: (payload: EachMessagePayload) => Promise<void>,\n    dlqTopic: string = 'error-events'\n  ): Promise<void> {\n    const consumer = this.kafka.consumer({ groupId });\n    await consumer.connect();\n    await consumer.subscribe({ topic, fromBeginning: false });\n\n    await consumer.run({\n      eachMessage: async (payload: EachMessagePayload) => {\n        const { topic: pTopic, partition, message } = payload;\n        const start = Date.now();\n\n        try {\n          await handler(payload);\n          this.logger.debug('Message processed successfully', {\n            topic: pTopic,\n            partition,\n            offset: message.offset,\n            duration: Date.now() - start\n          });\n        } catch (error) {\n          this.logger.error('Message processing failed, moving to DLQ', {\n            topic: pTopic,\n            partition,\n            offset: message.offset,\n            error\n          });\n\n          await this.producer.send({\n            topic: dlqTopic,\n            messages: [{\n              key: message.key,\n              value: message.value,\n              headers: {\n                ...message.headers,\n                'x-error-original-topic': Buffer.from(pTopic),\n                'x-error-message': Buffer.from((error as Error).message)\n              }\n            }]\n          });\n        }\n      },\n    });\n  }\n\n  public async disconnect(): Promise<void> {\n    try {\n      await this.producer.disconnect();\n      this.logger.info('Kafka client disconnected');\n    } catch (error) {\n      this.logger.error('Error during Kafka client disconnection', { error });\n    }\n  }\n}\n",
+      "timestamp": "2026-04-03T23:00:07.558212Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "7147165AF60B2A1EE5F2CA682D86C4993CABB7C97D5F7B6112E62F056A6CD01B",
+    "timestamp": 1775257207
+  }
+}

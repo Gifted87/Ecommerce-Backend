@@ -1,0 +1,36 @@
+{
+  "database_client_setup": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "2B07DEEC66C748069703372F1551E636815369DF522FC31885639A55ACF658DF",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Production-ready DatabaseService implementation for managing PostgreSQL connections with Knex, circuit breaking, and ACID-compliant transaction support.",
+      "filename": "database_service.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/infrastructure/database/database_service.ts",
+      "id": "c36ea169-cd00-44e7-abb7-29cf6fd9d138",
+      "provenance_data": {
+        "behaviour": "Initializes a singleton PostgreSQL connection pool using Knex, implements an Opossum circuit breaker for database operations, and provides a transactional wrapper with automatic retry logic for deadlocks. Monitors pool health and metrics.",
+        "interfaces": [
+          "initialize(config: unknown, logger: Logger): DatabaseService",
+          "getInstance(): DatabaseService",
+          "runTransaction<T>(work: (trx: Knex.Transaction) => Promise<T>, retries?: number): Promise<T>",
+          "healthCheck(): Promise<{status: 'up' | 'down', message?: string}>",
+          "getMetrics(): object",
+          "shutdown(): Promise<void>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a centralized, production-ready, resilient database access layer for the application, handling connections, transactions, and observability."
+      },
+      "source_code": "import knex, { Knex } from 'knex';\nimport { Logger } from 'pino';\nimport CircuitBreaker from 'opossum';\nimport { z } from 'zod';\n\n/**\n * Database configuration schema for runtime validation.\n */\nconst DbConfigSchema = z.object({\n  host: z.string(),\n  port: z.coerce.number(),\n  user: z.string(),\n  password: z.string(),\n  database: z.string(),\n  maxPoolSize: z.coerce.number().default(20),\n  minPoolSize: z.coerce.number().default(2),\n  idleTimeoutMillis: z.coerce.number().default(30000),\n  connectionTimeoutMillis: z.coerce.number().default(5000),\n  statementTimeout: z.coerce.number().default(10000),\n});\n\n/**\n * Singleton database service providing Knex query builder,\n * transaction management, circuit breaking, and health monitoring.\n */\nexport class DatabaseService {\n  private static instance: DatabaseService;\n  private knexInstance: Knex;\n  private breaker: CircuitBreaker;\n  private logger: Logger;\n\n  private constructor(config: z.infer<typeof DbConfigSchema>, logger: Logger) {\n    this.logger = logger.child({ module: 'infrastructure/database' });\n\n    this.knexInstance = knex({\n      client: 'pg',\n      connection: {\n        host: config.host,\n        port: config.port,\n        user: config.user,\n        password: config.password,\n        database: config.database,\n      },\n      pool: {\n        min: config.minPoolSize,\n        max: config.maxPoolSize,\n        idleTimeoutMillis: config.idleTimeoutMillis,\n        createTimeoutMillis: config.connectionTimeoutMillis,\n      },\n      acquireConnectionTimeout: config.connectionTimeoutMillis,\n      debug: false,\n    });\n\n    // Configure circuit breaker for database operations\n    this.breaker = new CircuitBreaker(\n      async (queryFn: () => Promise<any>) => await queryFn(),\n      {\n        timeout: config.statementTimeout,\n        errorThresholdPercentage: 50,\n        resetTimeout: 30000,\n      }\n    );\n\n    this.setupMonitoring();\n  }\n\n  public static initialize(config: unknown, logger: Logger): DatabaseService {\n    const validated = DbConfigSchema.parse(config);\n    if (!DatabaseService.instance) {\n      DatabaseService.instance = new DatabaseService(validated, logger);\n    }\n    return DatabaseService.instance;\n  }\n\n  public static getInstance(): DatabaseService {\n    if (!DatabaseService.instance) {\n      throw new Error('DatabaseService must be initialized before use.');\n    }\n    return DatabaseService.instance;\n  }\n\n  private setupMonitoring(): void {\n    this.breaker.on('open', () => this.logger.error('Database circuit breaker: OPEN'));\n    this.breaker.on('halfOpen', () => this.logger.warn('Database circuit breaker: HALF-OPEN'));\n    this.breaker.on('close', () => this.logger.info('Database circuit breaker: CLOSED'));\n  }\n\n  public get knex(): Knex {\n    return this.knexInstance;\n  }\n\n  /**\n   * Executes a transactional block with automatic retry logic for transient deadlock errors.\n   */\n  public async runTransaction<T>(\n    work: (trx: Knex.Transaction) => Promise<T>,\n    retries = 3\n  ): Promise<T> {\n    let attempt = 0;\n    while (attempt < retries) {\n      try {\n        return await this.breaker.fire(() => this.knexInstance.transaction(work));\n      } catch (error: any) {\n        attempt++;\n        // PostgreSql error code 40P01 is deadlock_detected\n        if (error?.code === '40P01' && attempt < retries) {\n          const delay = Math.pow(2, attempt) * 100;\n          this.logger.warn({ attempt, delay, error }, 'Deadlock detected, retrying transaction');\n          await new Promise((resolve) => setTimeout(resolve, delay));\n          continue;\n        }\n        this.logger.error({ error, attempt }, 'Transaction failed permanently');\n        throw error;\n      }\n    }\n    throw new Error('Transaction failed after maximum retry attempts');\n  }\n\n  /**\n   * Checks database connectivity.\n   */\n  public async healthCheck(): Promise<{ status: 'up' | 'down'; message?: string }> {\n    try {\n      await this.knexInstance.raw('SELECT 1');\n      return { status: 'up' };\n    } catch (error) {\n      this.logger.error({ error }, 'Database health check failed');\n      return { status: 'down', message: (error as Error).message };\n    }\n  }\n\n  /**\n   * Exports metrics from the connection pool.\n   */\n  public getMetrics() {\n    const pool = (this.knexInstance.client as any).pool;\n    return {\n      active: pool.numUsed(),\n      idle: pool.numFree(),\n      pending: pool.numPendingAcquires(),\n    };\n  }\n\n  /**\n   * Graceful shutdown of the database pool.\n   */\n  public async shutdown(): Promise<void> {\n    this.logger.info('Shutting down database connection pool');\n    await this.knexInstance.destroy();\n  }\n}\n",
+      "timestamp": "2026-04-03T23:06:48.931722Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "A102C4A2476ADD73E52AB6F18C327EB0BDBCE569ED0279D8DE6419FB5F57B626",
+    "timestamp": 1775257608
+  }
+}

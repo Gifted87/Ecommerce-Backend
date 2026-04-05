@@ -1,0 +1,37 @@
+{
+  "product_repository_implementation": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "928b5e28a50672e0d3c69c6f2a6321586520d2a452a8a8167f40794158614620",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Production-ready ProductRepository implementing full CRUD operations, soft-delete functionality, and atomic inventory management using SQL transactions and row-level locking.",
+      "filename": "ProductRepository.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/repositories/product/ProductRepository.ts",
+      "id": "b2490d60-ea34-41e5-bf88-336360c28861",
+      "provenance_data": {
+        "behaviour": "Provides high-concurrency, ACID-compliant CRUD operations and atomic inventory adjustments for the product catalog. Uses row-level locking for inventory integrity.",
+        "interfaces": [
+          "getById(id: string): Promise<Product | null>",
+          "getBySku(sku: string): Promise<Product | null>",
+          "createProduct(data: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product>",
+          "updateProduct(id: string, data: Partial<Product>): Promise<Product>",
+          "updateInventoryAtomic(productId: string, stockChange: number): Promise<void>",
+          "softDelete(id: string): Promise<void>",
+          "listProducts(limit: number, offset: number): Promise<Product[]>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Handles all persistence logic for the product catalog including CRUD and atomic inventory transactions within the ACID-compliant backend architecture."
+      },
+      "source_code": "import { Knex } from 'knex';\nimport { Logger } from 'pino';\nimport { DatabaseRepository, RepositoryError } from '../base/DatabaseRepository';\nimport { Product, ProductSchema } from '../../domain/Product';\nimport { z } from 'zod';\n\n/**\n * ProductRepository handles persistence and retrieval of Product catalog data.\n * Adheres to ACID principles and ensures high-concurrency safety using row locks.\n */\nexport class ProductRepository extends DatabaseRepository<Product, string> {\n  constructor(db: Knex, log: Logger) {\n    super(db, log, 'products');\n  }\n\n  /**\n   * Retrieves a product by its unique identifier.\n   */\n  public async getById(id: string): Promise<Product | null> {\n    return await this.findById(id, ProductSchema);\n  }\n\n  /**\n   * Retrieves a product by its SKU.\n   */\n  public async getBySku(sku: string): Promise<Product | null> {\n    return await this.breaker.fire(async () => {\n      const start = Date.now();\n      try {\n        const result = await this.knex(this.tableName)\n          .where({ sku })\n          .whereNull('deleted_at')\n          .first();\n        \n        if (!result) return null;\n        const parsed = ProductSchema.parse(result);\n        this.logger.debug({ duration: Date.now() - start, sku }, 'Product found by SKU');\n        return parsed;\n      } catch (error) {\n        this.logger.error({ error, sku }, 'Query by SKU failed');\n        throw new RepositoryError('Failed to query by SKU', 'DB_QUERY_ERROR', error);\n      }\n    });\n  }\n\n  /**\n   * Creates a new product entry in the catalog.\n   */\n  public async createProduct(data: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> {\n    const validatedData = ProductSchema.omit({ id: true, created_at: true, updated_at: true }).parse(data);\n    return await this.create(validatedData, ProductSchema);\n  }\n\n  /**\n   * Updates an existing product with strict validation.\n   */\n  public async updateProduct(id: string, data: Partial<Product>): Promise<Product> {\n    const validatedData = ProductSchema.partial().parse(data);\n    return await this.update(id, validatedData, ProductSchema);\n  }\n\n  /**\n   * Performs an atomic inventory update linked to product status changes.\n   * Utilizes SELECT FOR UPDATE to ensure isolation.\n   */\n  public async updateInventoryAtomic(productId: string, stockChange: number): Promise<void> {\n    await this.transaction(async (trx) => {\n      try {\n        // Explicitly lock the product row for update to ensure atomicity\n        const product = await trx(this.tableName)\n          .where({ id: productId })\n          .forUpdate()\n          .first();\n\n        if (!product) {\n          throw new RepositoryError('Product not found for inventory update', 'NOT_FOUND');\n        }\n\n        // Apply inventory update\n        const affectedRows = await trx('inventory')\n          .where({ product_id: productId })\n          .increment('total_stock', stockChange);\n        \n        if (affectedRows === 0) {\n            throw new RepositoryError('Inventory record not found', 'NOT_FOUND');\n        }\n\n        this.logger.info({ productId, stockChange }, 'Atomic inventory update successful');\n      } catch (error: any) {\n        this.logger.error({ error, productId }, 'Atomic inventory update failed');\n        throw error;\n      }\n    });\n  }\n\n  /**\n   * Performs a soft delete of a product.\n   */\n  public async softDelete(id: string): Promise<void> {\n    return await this.breaker.fire(async () => {\n      const start = Date.now();\n      try {\n        const affected = await this.knex(this.tableName)\n          .where({ id })\n          .update({ deleted_at: new Date() });\n          \n        if (affected === 0) {\n            throw new RepositoryError('Product not found for deletion', 'NOT_FOUND');\n        }\n        \n        this.logger.debug({ duration: Date.now() - start, id }, 'Product soft-deleted');\n      } catch (error) {\n        this.logger.error({ error, id }, 'Soft-delete failed');\n        throw new RepositoryError('Failed to soft-delete product', 'DB_DELETE_ERROR', error);\n      }\n    });\n  }\n\n  /**\n   * Paginated list retrieval for catalog browsing.\n   */\n  public async listProducts(limit: number = 20, offset: number = 0): Promise<Product[]> {\n    return await this.breaker.fire(async () => {\n      const start = Date.now();\n      try {\n        const results = await this.knex(this.tableName)\n          .select('*')\n          .whereNull('deleted_at')\n          .limit(limit)\n          .offset(offset)\n          .orderBy('created_at', 'desc');\n        \n        const parsed = z.array(ProductSchema).parse(results);\n        this.logger.debug({ duration: Date.now() - start, limit, offset }, 'Products listed');\n        return parsed;\n      } catch (error) {\n        this.logger.error({ error, limit, offset }, 'List products failed');\n        throw new RepositoryError('Failed to list products', 'DB_QUERY_ERROR', error);\n      }\n    });\n  }\n}\n",
+      "timestamp": "2026-04-03T23:08:15.796325Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "7F28AFB8786210750764FFC1A7FDEE7725B02023E1E303A54B458E2E6ED8D92C",
+    "timestamp": 1775257695
+  }
+}

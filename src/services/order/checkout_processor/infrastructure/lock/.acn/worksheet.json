@@ -1,0 +1,32 @@
+{
+  "distributed_lock_impl": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "5b77876b5d928236d6a5996020579e00041231f24d1421684c20791054a32331",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "DistributedLockService implementation for atomic order processing in a distributed environment using Redis and Opossum.",
+      "filename": "DistributedLockService.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/order/checkout_processor/infrastructure/lock/DistributedLockService.ts",
+      "id": "28c0d6ed-0b9c-4cc2-ba86-330edf463a14",
+      "provenance_data": {
+        "behaviour": "Provides mutual exclusion for order processing operations across distributed nodes, preventing race conditions via Redis-backed locking with auto-release TTL and atomic Lua-based verification. Uses circuit breakers to ensure system resilience during Redis unavailability.",
+        "interfaces": [
+          "withLock<T>(orderId: string, callback: () => Promise<T>): Promise<T>",
+          "getHealth(): Promise<{ status: 'healthy' | 'unhealthy'; redis: string; circuit: string }>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a robust, distributed mutual exclusion mechanism essential for maintaining transactional integrity in high-concurrency order state transitions."
+      },
+      "source_code": "import Redis from 'ioredis';\nimport Opossum from 'opossum';\nimport { randomUUID } from 'crypto';\nimport { Logger } from 'pino';\n\n/**\n * Custom error class for Distributed Lock Service operations.\n */\nexport class DistributedLockError extends Error {\n  constructor(public message: string, public code: string, public originalError?: Error) {\n    super(message);\n    this.name = 'DistributedLockError';\n  }\n}\n\n/**\n * DistributedLockService provides a mutex locking mechanism using Redis.\n * Ensures that only one worker node can process a specific OrderID at a time.\n */\nexport class DistributedLockService {\n  private redis: Redis;\n  private breaker: Opossum;\n  private readonly DEFAULT_TTL = 5; // seconds\n\n  /**\n   * @param redisClient An initialized ioredis instance.\n   * @param logger A pino logger instance for structured logging.\n   */\n  constructor(\n    private redisClient: Redis,\n    private logger: Logger\n  ) {\n    this.redis = redisClient;\n\n    // Circuit breaker configuration\n    const options = {\n      timeout: 3000,\n      errorThresholdPercentage: 50,\n      resetTimeout: 30000,\n    };\n\n    this.breaker = new Opossum(async (cmd: string, ...args: any[]) => {\n      return (this.redis as any)[cmd](...args);\n    }, options);\n\n    this.breaker.on('open', () => this.logger.error('DistributedLockService: Circuit breaker opened.'));\n    this.breaker.on('close', () => this.logger.info('DistributedLockService: Circuit breaker closed.'));\n  }\n\n  /**\n   * Executes a provided callback function within a distributed lock.\n   * Ensures atomicity of lock acquisition and release.\n   * \n   * @param orderId The ID of the order to lock.\n   * @param callback The async function to execute.\n   * @returns The result of the callback.\n   */\n  public async withLock<T>(orderId: string, callback: () => Promise<T>): Promise<T> {\n    const lockKey = `order:lock:${orderId}`;\n    const requestId = randomUUID();\n\n    const acquired = await this.acquireLock(lockKey, requestId);\n\n    if (!acquired) {\n      throw new DistributedLockError(\n        `Could not acquire lock for order: ${orderId}`,\n        'LOCK_ACQUISITION_FAILED'\n      );\n    }\n\n    try {\n      this.logger.info({ orderId, requestId }, 'Lock acquired');\n      return await callback();\n    } catch (error) {\n      this.logger.error({ orderId, requestId, error }, 'Error during locked operation');\n      throw error;\n    } finally {\n      await this.releaseLock(lockKey, requestId);\n    }\n  }\n\n  /**\n   * Attempts to acquire a Redis lock using SET NX EX.\n   */\n  private async acquireLock(key: string, requestId: string): Promise<boolean> {\n    try {\n      const result = await this.breaker.fire('set', key, requestId, 'EX', this.DEFAULT_TTL, 'NX');\n      return result === 'OK';\n    } catch (error) {\n      this.logger.error({ key, error }, 'Failed to acquire lock');\n      throw new DistributedLockError('Redis error during lock acquisition', 'REDIS_ERROR', error as Error);\n    }\n  }\n\n  /**\n   * Releases the lock only if the current requestId matches the one in Redis.\n   * Uses a Lua script to ensure atomic check-and-delete.\n   */\n  private async releaseLock(key: string, requestId: string): Promise<void> {\n    const luaScript = `\n      if redis.call(\"get\", KEYS[1]) == ARGV[1] then\n        return redis.call(\"del\", KEYS[1])\n      else\n        return 0\n      end\n    `;\n\n    try {\n      await this.breaker.fire('eval', luaScript, 1, key, requestId);\n      this.logger.info({ key, requestId }, 'Lock released');\n    } catch (error) {\n      this.logger.error({ key, requestId, error }, 'Failed to release lock');\n      throw new DistributedLockError('Redis error during lock release', 'REDIS_ERROR', error as Error);\n    }\n  }\n\n  /**\n   * Returns current service health status.\n   */\n  public async getHealth(): Promise<{ status: 'healthy' | 'unhealthy'; redis: string; circuit: string }> {\n    const redisStatus = this.redis.status;\n    const circuitStatus = this.breaker.opened ? 'open' : 'closed';\n\n    return {\n      status: redisStatus === 'ready' && circuitStatus === 'closed' ? 'healthy' : 'unhealthy',\n      redis: redisStatus,\n      circuit: circuitStatus,\n    };\n  }\n}\n",
+      "timestamp": "2026-04-03T23:05:13.187646Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "FCF54AAB818DADE63241696384FA0C5201A8204E413A36E1BC20C866A614C246",
+    "timestamp": 1775257513
+  }
+}

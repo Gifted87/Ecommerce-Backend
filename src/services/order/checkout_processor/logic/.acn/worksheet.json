@@ -1,0 +1,33 @@
+{
+  "order_transition_engine_impl": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "c328e833486127e997576594d2149b806d2d38562d294814d48508930438a356",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implemented the OrderTransitionEngine class to handle order status transitions and financial calculation verification.",
+      "filename": "OrderTransitionEngine.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/order/checkout_processor/logic/OrderTransitionEngine.ts",
+      "id": "b6408299-9883-471d-862f-8a0edb7683aa",
+      "provenance_data": {
+        "behaviour": "Provides stateless business logic for validating order lifecycle state transitions and verifying high-precision financial integrity using decimal.js.",
+        "interfaces": [
+          "validateTransition(currentStatus: OrderStatus, nextStatus: OrderStatus, context?: { tracking_number?: string }): void",
+          "verifyOrderFinancials(items: OrderItem[], totalAmount: string): void",
+          "processTransition(orderId: string, currentStatus: OrderStatus, nextStatus: OrderStatus, context?: { tracking_number?: string }): Promise<void>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides robust, stateless verification for order state changes and financial correctness, crucial for maintaining ACID-like transactional integrity in the order lifecycle."
+      },
+      "source_code": "import { Decimal } from 'decimal.js';\nimport { Logger } from 'pino';\nimport { \n  OrderStatus, \n  OrderTransitions, \n  OrderItem \n} from '../../../domain/order_schemas';\n\n/**\n * Custom error thrown when a requested state transition is not permitted.\n */\nexport class InvalidTransitionError extends Error {\n  constructor(public current: OrderStatus, public next: OrderStatus) {\n    super(`Invalid transition from ${current} to ${next}`);\n    this.name = 'InvalidTransitionError';\n  }\n}\n\n/**\n * Custom error thrown when financial calculations do not match the expected totals.\n */\nexport class CalculationMismatchError extends Error {\n  constructor(public message: string) {\n    super(message);\n    this.name = 'CalculationMismatchError';\n  }\n}\n\n/**\n * The OrderTransitionEngine is a stateless service responsible for:\n * 1. Validating state machine transitions.\n * 2. High-precision financial arithmetic.\n * 3. Ensuring contextual integrity for state changes.\n */\nexport class OrderTransitionEngine {\n  constructor(private readonly logger: Logger) {}\n\n  /**\n   * Validates if the transition from currentStatus to nextStatus is allowed\n   * and verifies required context.\n   */\n  public validateTransition(\n    currentStatus: OrderStatus,\n    nextStatus: OrderStatus,\n    context?: { tracking_number?: string }\n  ): void {\n    const allowed = OrderTransitions[currentStatus];\n\n    if (!allowed.includes(nextStatus)) {\n      this.logger.error({\n        msg: 'Illegal state transition attempt',\n        current: currentStatus,\n        next: nextStatus,\n      });\n      throw new InvalidTransitionError(currentStatus, nextStatus);\n    }\n\n    if (nextStatus === OrderStatus.SHIPPED) {\n      if (!context?.tracking_number || context.tracking_number.trim().length === 0) {\n        this.logger.error({\n          msg: 'Transition to SHIPPED missing tracking number',\n          current: currentStatus,\n        });\n        throw new Error('MISSING_FULFILLMENT_INFO: Tracking number is required for SHIPPED status');\n      }\n    }\n  }\n\n  /**\n   * Calculates the total order amount from items and compares it with the expected total.\n   * Utilizes decimal.js for financial precision.\n   * \n   * @throws CalculationMismatchError if internal calculations do not align.\n   */\n  public verifyOrderFinancials(items: OrderItem[], totalAmount: string): void {\n    let calculatedTotal = new Decimal(0);\n\n    for (const item of items) {\n      const unitPrice = new Decimal(item.unit_price);\n      const quantity = new Decimal(item.quantity);\n      const expectedItemTotal = unitPrice.mul(quantity);\n      const actualItemTotal = new Decimal(item.item_total);\n\n      if (!expectedItemTotal.equals(actualItemTotal)) {\n        this.logger.error({\n          msg: 'Item total calculation mismatch',\n          sku: item.sku,\n          expected: expectedItemTotal.toString(),\n          actual: actualItemTotal.toString(),\n        });\n        throw new CalculationMismatchError(\n          `Mismatch for SKU ${item.sku}: expected ${expectedItemTotal} but got ${actualItemTotal}`\n        );\n      }\n\n      calculatedTotal = calculatedTotal.add(actualItemTotal);\n    }\n\n    const expectedTotal = new Decimal(totalAmount);\n    if (!calculatedTotal.equals(expectedTotal)) {\n      this.logger.error({\n        msg: 'Order total mismatch',\n        calculated: calculatedTotal.toString(),\n        provided: expectedTotal.toString(),\n      });\n      throw new CalculationMismatchError('Calculated order total does not match provided total');\n    }\n  }\n\n  /**\n   * Orchestrates the transition validation and log emission.\n   * This is the entry point for the order state manager.\n   */\n  public async processTransition(\n    orderId: string,\n    currentStatus: OrderStatus,\n    nextStatus: OrderStatus,\n    context?: { tracking_number?: string }\n  ): Promise<void> {\n    this.logger.info({\n      msg: 'Processing order state transition',\n      orderId,\n      from: currentStatus,\n      to: nextStatus,\n    });\n\n    this.validateTransition(currentStatus, nextStatus, context);\n\n    this.logger.info({\n      msg: 'Transition validated successfully',\n      orderId,\n      to: nextStatus,\n    });\n  }\n}\n",
+      "timestamp": "2026-04-03T23:07:58.298074Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "3D0FEA3244DE9611D4299FBA8A14134BB2CBBA05BAE53FA0868FC8F43CFB5810",
+    "timestamp": 1775257678
+  }
+}

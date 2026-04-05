@@ -1,0 +1,33 @@
+{
+  "controller_requirements_file": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "81d77a94254b9d03c80650d32f56b06387799532d847144e54911d3326162391",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Creation of production-ready package.json for catalog and inventory controller service, including core dependencies like Zod, Opossum, Pino, and Decimal.js.",
+      "filename": "package.json",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/controllers/catalog_inventory_controller/package.json",
+      "id": "9cb8dc5d-12be-48b3-8790-324cef5a83a8",
+      "provenance_data": {
+        "behaviour": "Defines production-ready dependencies for catalog and inventory controllers. Enables TypeScript compilation, linting, and testing workflows.",
+        "interfaces": [
+          "dependencies",
+          "devDependencies",
+          "scripts"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides essential package metadata, scripts, and dependency management for the catalog/inventory microservice."
+      },
+      "source_code": "{\n  \"name\": \"@acn/catalog-inventory-controller\",\n  \"version\": \"1.0.0\",\n  \"description\": \"Production-ready catalog and inventory controller service\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"engines\": {\n    \"node\": \">=20.0.0\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/index.js\",\n    \"lint\": \"eslint 'src/**/*.ts'\",\n    \"type-check\": \"tsc --noEmit\",\n    \"test\": \"jest --coverage\"\n  },\n  \"author\": \"ACN Actuator\",\n  \"license\": \"UNLICENSED\",\n  \"dependencies\": {\n    \"decimal.js\": \"10.4.3\",\n    \"express\": \"4.19.2\",\n    \"opossum\": \"8.3.1\",\n    \"pino\": \"9.3.2\",\n    \"pino-pretty\": \"11.2.2\",\n    \"zod\": \"3.23.8\"\n  },\n  \"devDependencies\": {\n    \"@types/express\": \"4.17.21\",\n    \"@types/jest\": \"29.5.12\",\n    \"@types/node\": \"20.14.10\",\n    \"@typescript-eslint/eslint-plugin\": \"7.14.1\",\n    \"@typescript-eslint/parser\": \"7.14.1\",\n    \"eslint\": \"8.57.0\",\n    \"jest\": \"29.7.0\",\n    \"ts-jest\": \"29.1.5\",\n    \"typescript\": \"5.5.3\"\n  }\n}",
+      "timestamp": "2026-04-03T23:18:41.762334Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "E5E83301160A7DEC41D29C75E4235CD4674BC1B19E25A9AB4299727D2C8E03C5",
+    "timestamp": 1775258321
+  }
+}

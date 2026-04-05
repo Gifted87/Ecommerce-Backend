@@ -1,0 +1,29 @@
+{
+  "order_interface_requirements": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "76716B5281C8F586B027345FBE6C71A1BA7411A857370656B28D83B29F55DB63",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Production-ready package.json for the Order API Interface Layer.",
+      "filename": "package.json",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/api/order/interfaces/package.json",
+      "id": "3f2ef068-4103-46cd-baef-3afb6884752d",
+      "provenance_data": {
+        "behaviour": "Creates a production-ready package.json configuration file for the Order API Interface Layer. This file defines project metadata, scripts for build/lint/test/type-checking, and strictly pins production and development dependencies (express, zod, pino, opossum) required to maintain high system availability and interface integrity.",
+        "interfaces": [],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides the necessary configuration for dependency management and CI/CD pipelines in the Order API layer, ensuring consistency across the ecommerce backend architecture."
+      },
+      "source_code": "{\n  \"name\": \"@acn/order-api-interface\",\n  \"version\": \"1.0.0\",\n  \"description\": \"Production-ready order API interface layer for the ecommerce backend\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"engines\": {\n    \"node\": \">=20.0.0\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"lint\": \"eslint 'src/**/*.ts'\",\n    \"type-check\": \"tsc --noEmit\",\n    \"test\": \"jest\",\n    \"start\": \"node dist/index.js\"\n  },\n  \"author\": \"ACN Actuator\",\n  \"license\": \"UNLICENSED\",\n  \"dependencies\": {\n    \"express\": \"4.19.2\",\n    \"opossum\": \"8.3.1\",\n    \"pino\": \"9.3.2\",\n    \"pino-pretty\": \"11.2.2\",\n    \"zod\": \"3.23.8\"\n  },\n  \"devDependencies\": {\n    \"@types/express\": \"4.17.21\",\n    \"@types/jest\": \"29.5.12\",\n    \"@types/node\": \"20.14.10\",\n    \"@typescript-eslint/eslint-plugin\": \"7.14.1\",\n    \"@typescript-eslint/parser\": \"7.14.1\",\n    \"eslint\": \"8.57.0\",\n    \"jest\": \"29.7.0\",\n    \"ts-jest\": \"29.1.5\",\n    \"typescript\": \"5.5.3\"\n  }\n}",
+      "timestamp": "2026-04-03T23:28:06.784842Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "937E1005ED32B00E5C7C8B12CA22D5205629B453348D371AAF384584100AF2CC",
+    "timestamp": 1775258886
+  }
+}

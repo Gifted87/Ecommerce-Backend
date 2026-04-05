@@ -1,0 +1,33 @@
+{
+  "domain_schema_implementation": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "955FBF28BDC82F8F9BD340FC2D81BD873EC4A99BD29845540401786DDC6DC805",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Domain-level Zod schemas and validation logic for Product and Inventory.",
+      "filename": "domain.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/schemas/domain.ts",
+      "id": "8e559368-2c7f-42a0-9071-d51a93b6c7b9",
+      "provenance_data": {
+        "behaviour": "Implements Zod schemas and validation logic for Product and Inventory entities to ensure data integrity and domain-specific stock consistency. Includes logic to prevent negative stock and enforce the invariant total_stock >= reserved_stock.",
+        "interfaces": [
+          "validateProduct(data: unknown): z.SafeParseReturnType<any, Product>",
+          "validateInventory(data: unknown): z.SafeParseReturnType<any, Inventory>",
+          "validateInventoryMutation(current: Inventory, totalChange: number, reservedChange: number): { success: boolean; data?: Inventory; error?: string }"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides central, production-ready domain validation logic for Product and Inventory entities to maintain ACID integrity and business rules."
+      },
+      "source_code": "import { z } from 'zod';\n\n/**\n * @fileoverview Product and Inventory domain schemas with strict validation logic.\n * Enforces SKU format [CATEGORY]-[PRODUCT_CODE]-[VARIANT_ID] and maintains\n * domain invariants for inventory state.\n * \n * This module serves as the primary data validation layer, ensuring integrity\n * before persistence in PostgreSQL.\n */\n\n/**\n * SKU format: [CATEGORY]-[PRODUCT_CODE]-[VARIANT_ID]\n * Example: ELEC-LAP-001\n * Strict regex ensures no invalid characters or malformed identifiers.\n */\nconst skuRegex = /^[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+$/;\n\n/**\n * Product Schema\n * Defines the core attributes for catalog entities.\n * Uses JSONB for metadata to allow extensibility while enforcing core fields.\n */\nexport const ProductSchema = z.object({\n  id: z.string().uuid(),\n  sku: z.string().regex(skuRegex, 'SKU must follow format [CATEGORY]-[PRODUCT_CODE]-[VARIANT_ID]'),\n  name: z.string().min(3, 'Product name must be at least 3 characters long'),\n  price: z.string().regex(/^\\d+(\\.\\d{1,2})?$/, 'Price must be a valid decimal string'),\n  metadata: z.record(z.unknown()).optional(),\n  created_at: z.date().default(() => new Date()),\n  updated_at: z.date().default(() => new Date()),\n});\n\n/**\n * Type inferred from ProductSchema.\n */\nexport type Product = z.infer<typeof ProductSchema>;\n\n/**\n * Inventory Schema\n * Manages dynamic stock state and enforces consistency constraints.\n * Ensures total_stock >= reserved_stock at all times.\n */\nexport const InventorySchema = z\n  .object({\n    product_id: z.string().uuid(),\n    total_stock: z.number().int().nonnegative(),\n    reserved_stock: z.number().int().nonnegative(),\n  })\n  .refine(\n    (data) => data.total_stock >= data.reserved_stock,\n    {\n      message: 'Total stock must be greater than or equal to reserved stock',\n      path: ['total_stock'],\n    }\n  )\n  .transform((data) => ({\n    ...data,\n    available_stock: data.total_stock - data.reserved_stock,\n  }));\n\n/**\n * Type inferred from InventorySchema.\n */\nexport type Inventory = z.infer<typeof InventorySchema>;\n\n/**\n * Validates product data input using Zod safeParse for performance.\n * \n * @param data - The raw input data to validate.\n * @returns The result of the safeParse operation.\n */\nexport const validateProduct = (data: unknown) => {\n  return ProductSchema.safeParse(data);\n};\n\n/**\n * Validates inventory data input using Zod safeParse for performance.\n * \n * @param data - The raw input data to validate.\n * @returns The result of the safeParse operation.\n */\nexport const validateInventory = (data: unknown) => {\n  return InventorySchema.safeParse(data);\n};\n\n/**\n * Domain-specific integrity check for stock transitions.\n * Ensures the resulting inventory state is valid before performing database updates.\n * \n * @param current - The current inventory state.\n * @param totalChange - The change to be applied to total_stock (can be negative).\n * @param reservedChange - The change to be applied to reserved_stock (can be negative).\n * @returns An object containing the success status, the new inventory object, or an error message.\n */\nexport const validateInventoryMutation = (\n  current: Inventory,\n  totalChange: number,\n  reservedChange: number\n): { success: boolean; data?: Inventory; error?: string } => {\n  const nextTotal = current.total_stock + totalChange;\n  const nextReserved = current.reserved_stock + reservedChange;\n\n  // Ensure resulting stock levels are non-negative\n  if (nextTotal < 0 || nextReserved < 0) {\n    return { success: false, error: 'Negative stock levels are not permitted' };\n  }\n\n  // Ensure business invariant: total_stock >= reserved_stock\n  if (nextTotal < nextReserved) {\n    return { success: false, error: 'Cannot reserve more stock than total available' };\n  }\n\n  // Return the validated, transformed state\n  return {\n    success: true,\n    data: {\n      product_id: current.product_id,\n      total_stock: nextTotal,\n      reserved_stock: nextReserved,\n      available_stock: nextTotal - nextReserved,\n    },\n  };\n};\n",
+      "timestamp": "2026-04-03T23:05:56.239078Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "8E47A2C582919E474A9281DA9A6229297358FDD531FEBA08BD6362E022A7698F",
+    "timestamp": 1775257556
+  }
+}

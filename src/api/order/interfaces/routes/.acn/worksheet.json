@@ -1,0 +1,31 @@
+{
+  "order_interface_router": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "246AC36D1FF02195F9F36788041865C645082D6097837FC7B05FFC05AFB9C8C4",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implemented the Express routing module for the Order Management system, integrating security, validation, and observability.",
+      "filename": "order_router.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/api/order/interfaces/routes/order_router.ts",
+      "id": "37bd4782-28f8-41f5-941b-534c9d640f9e",
+      "provenance_data": {
+        "behaviour": "Binds Express middleware and controllers for the Order API. Implements correlation ID tracking, RBAC via injected middleware, Zod-based request validation, and circuit breaker protection for order retrieval. Routes are configured for full CRUD order lifecycle operations.",
+        "interfaces": [
+          "createOrderRouter(deps: OrderRouterDependencies): Router"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides the unified routing layer for Order management, ensuring all requests pass through security, validation, and monitoring gates."
+      },
+      "source_code": "import { Router, Request, Response, NextFunction } from 'express';\nimport CircuitBreaker from 'opossum';\nimport { Logger } from 'pino';\nimport { z } from 'zod';\n\n// Interfaces for injected dependencies\nexport interface OrderRouterDependencies {\n  orderController: any; \n  logger: Logger;\n  authMiddleware: any; \n  rbacMiddleware: (permissions: string[]) => any;\n  validateSchema: (schema: z.ZodSchema) => (req: Request, res: Response, next: NextFunction) => void;\n  errorHandler: (err: any, req: Request, res: Response, next: NextFunction) => void;\n  correlationMiddleware: (req: Request, res: Response, next: NextFunction) => void;\n  schemas: {\n    OrderRequestSchema: z.ZodSchema;\n  };\n}\n\n/**\n * Creates the Express router for Order Management.\n * Implements security, validation, observability, and circuit breaking.\n */\nexport const createOrderRouter = (deps: OrderRouterDependencies): Router => {\n  const router = Router();\n  const { \n    orderController, \n    authMiddleware, \n    rbacMiddleware, \n    validateSchema, \n    errorHandler, \n    correlationMiddleware,\n    schemas\n  } = deps;\n\n  // Global Middleware\n  router.use(correlationMiddleware);\n\n  // Circuit Breaker for Order Fetching\n  const getOrderBreaker = new CircuitBreaker(\n    async (id: string) => await orderController.getOrderById(id),\n    {\n      timeout: 5000,\n      errorThresholdPercentage: 50,\n      resetTimeout: 30000,\n    }\n  );\n\n  /**\n   * POST /orders\n   * Initiates order checkout.\n   */\n  router.post(\n    '/',\n    authMiddleware(),\n    rbacMiddleware(['order:write']),\n    validateSchema(schemas.OrderRequestSchema),\n    async (req: Request, res: Response, next: NextFunction) => {\n      try {\n        await orderController.createOrder(req, res);\n      } catch (error) {\n        next(error);\n      }\n    }\n  );\n\n  /**\n   * GET /orders\n   * Lists orders for the authenticated user.\n   */\n  router.get(\n    '/',\n    authMiddleware(),\n    rbacMiddleware(['order:read']),\n    async (req: Request, res: Response, next: NextFunction) => {\n      try {\n        await orderController.listOrders(req, res);\n      } catch (error) {\n        next(error);\n      }\n    }\n  );\n\n  /**\n   * GET /orders/:id\n   * Retrieves order details with circuit breaking.\n   */\n  router.get(\n    '/:id',\n    authMiddleware(),\n    rbacMiddleware(['order:read']),\n    async (req: Request, res: Response, next: NextFunction) => {\n      try {\n        const order = await getOrderBreaker.fire(req.params.id);\n        res.status(200).json(order);\n      } catch (error) {\n        next(error);\n      }\n    }\n  );\n\n  /**\n   * PATCH /orders/:id\n   * Handles order state transitions.\n   */\n  router.patch(\n    '/:id',\n    authMiddleware(),\n    rbacMiddleware(['order:write']),\n    async (req: Request, res: Response, next: NextFunction) => {\n      try {\n        await orderController.updateOrderStatus(req, res);\n      } catch (error) {\n        next(error);\n      }\n    }\n  );\n\n  /**\n   * DELETE /orders/:id\n   * Cancels an order.\n   */\n  router.delete(\n    '/:id',\n    authMiddleware(),\n    rbacMiddleware(['order:write']),\n    async (req: Request, res: Response, next: NextFunction) => {\n      try {\n        await orderController.cancelOrder(req, res);\n      } catch (error) {\n        next(error);\n      }\n    }\n  );\n\n  // Global error handler\n  router.use(errorHandler);\n\n  return router;\n};",
+      "timestamp": "2026-04-03T23:35:46.529248Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "E868E4245736ED5D20E9A561CC69D8CE7282E6D52CB62FBC36BBC917F0BD71CF",
+    "timestamp": 1775259346
+  }
+}

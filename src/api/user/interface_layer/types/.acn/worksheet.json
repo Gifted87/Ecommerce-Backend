@@ -1,0 +1,37 @@
+{
+  "interface_types": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "f9273c52e4d0239127d425b0f49c06497f1f31f9d51171d9d9368d407353f47c",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implements comprehensive API Data Transfer Objects (DTOs) and Zod validation schemas for the user management domain, providing a strict contract for HTTP interfaces.",
+      "filename": "types.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/api/user/interface_layer/types.ts",
+      "id": "80d9441f-6cc6-4bb3-93c2-0e43cf717d3a",
+      "provenance_data": {
+        "behaviour": "Defines shared TypeScript types and Zod schemas for user registration, profile updates, and MFA workflows. Ensures type safety and input validation across the API layer.",
+        "interfaces": [
+          "ApiResponse<T>",
+          "RegistrationRequest",
+          "ProfileUpdateRequest",
+          "MfaSetupRequest",
+          "MfaVerifyRequest",
+          "PublicUser",
+          "SafeProfile"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides strictly typed and validated data structures for the API interface layer, ensuring input sanitization and consistent API response contracts."
+      },
+      "source_code": "import { z } from 'zod';\n\n/**\n * @fileoverview API Data Transfer Objects (DTOs) and Zod validation schemas for User Management.\n * This file serves as the single source of truth for the API contract between clients and the domain service.\n * All types are strictly typed, immutable, and fully validated at runtime.\n */\n\n/**\n * Common Metadata for API responses.\n */\nexport interface ApiResponseMeta {\n  readonly requestId: string;\n  readonly timestamp: string;\n}\n\n/**\n * Generic API Response wrapper.\n */\nexport interface ApiResponse<T = unknown> {\n  readonly status: 'success' | 'error';\n  readonly data?: T;\n  readonly error?: {\n    readonly code: string;\n    readonly message: string;\n    readonly details?: unknown;\n  };\n  readonly meta: ApiResponseMeta;\n}\n\n/**\n * Schema for User Registration.\n */\nexport const UserRegistrationSchema = z.object({\n  email: z.string().email('Invalid email format').trim().toLowerCase(),\n  password: z\n    .string()\n    .min(12, 'Password must be at least 12 characters')\n    .regex(/[A-Z]/, 'Must contain uppercase letter')\n    .regex(/[a-z]/, 'Must contain lowercase letter')\n    .regex(/[0-9]/, 'Must contain digit')\n    .regex(/[^A-Za-z0-9]/, 'Must contain special character'),\n  username: z.string().min(3).max(50).trim(),\n  firstName: z.string().min(1).max(100).trim(),\n  lastName: z.string().min(1).max(100).trim(),\n});\n\nexport type RegistrationRequest = z.infer<typeof UserRegistrationSchema>;\n\n/**\n * Schema for Profile Update.\n */\nexport const ProfileUpdateSchema = z.object({\n  username: z.string().min(3).max(50).trim().optional(),\n  firstName: z.string().min(1).max(100).trim().optional(),\n  lastName: z.string().min(1).max(100).trim().optional(),\n  email: z.string().email().trim().toLowerCase().optional(),\n});\n\nexport type ProfileUpdateRequest = z.infer<typeof ProfileUpdateSchema>;\n\n/**\n * Schema for MFA Setup initiation.\n */\nexport const MfaSetupSchema = z.object({\n  method: z.enum(['TOTP', 'WEBAUTHN']),\n});\n\nexport type MfaSetupRequest = z.infer<typeof MfaSetupSchema>;\n\n/**\n * Schema for MFA Verification.\n */\nexport const MfaVerifySchema = z.object({\n  code: z.string().length(6, 'MFA code must be 6 digits').regex(/^\\d+$/, 'MFA code must be numeric'),\n});\n\nexport type MfaVerifyRequest = z.infer<typeof MfaVerifySchema>;\n\n/**\n * Public User Profile DTO (Excludes sensitive fields).\n */\nexport interface PublicUser {\n  readonly userId: string;\n  readonly email: string;\n  readonly username: string;\n  readonly firstName: string;\n  readonly lastName: string;\n  readonly isVerified: boolean;\n  readonly createdAt: string;\n}\n\n/**\n * Safe Profile DTO (Excludes PII/Internal logic).\n */\nexport interface SafeProfile {\n  readonly username: string;\n  readonly firstName: string;\n  readonly lastName: string;\n  readonly email: string;\n}\n",
+      "timestamp": "2026-04-03T23:28:41.571730Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "576C0B2FF2210143B6F122208560A83298D74C6BB4FC61BBD9D1358A8BD2A45C",
+    "timestamp": 1775258921
+  }
+}

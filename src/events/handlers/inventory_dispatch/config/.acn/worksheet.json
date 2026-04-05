@@ -1,0 +1,32 @@
+{
+  "inventory_dispatch_config_module": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "385faef51350022398dd15e52f872b83618ec4a041202b0968dd0419c04c4566",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "A production-ready environment configuration provider module using Zod and dotenv to enforce runtime environment safety and configuration integrity for the Inventory Dispatch Handler.",
+      "filename": "config.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/events/handlers/inventory_dispatch/config/config.ts",
+      "id": "646ce3d1-345c-4e04-bff2-09253cbcdfe7",
+      "provenance_data": {
+        "behaviour": "Initializes the application configuration by parsing and validating environment variables against a strict Zod schema. If validation fails, it logs a structured JSON error to stderr and terminates the process with status 1. The configuration is frozen to ensure immutability at runtime.",
+        "interfaces": [
+          "export const config: Readonly<AppConfig>",
+          "export type AppConfig = z.infer<typeof envSchema>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides centralized, type-safe, and validated configuration management. Ensures the application fails fast if critical environment variables are missing or incorrectly formatted, maintaining system integrity and observability."
+      },
+      "source_code": "import { z } from 'zod';\nimport dotenv from 'dotenv';\n\n/**\n * @fileoverview Central configuration management for the Inventory Dispatch Handler.\n * Provides a strictly validated, immutable, and type-safe configuration object.\n * Loads variables from the environment and ensures system integrity at boot time.\n * \n * This module follows the Singleton pattern, ensuring that the application environment\n * is validated exactly once upon initialization.\n */\n\n// Initialize dotenv to load .env files if present.\ndotenv.config();\n\n/**\n * Zod schema defining the strict environment configuration requirements for the\n * Inventory Dispatcher, including Kafka, Security, and Circuit Breaker settings.\n */\nconst envSchema = z.object({\n  // Application & Logging\n  APP_ENV: z.enum(['development', 'staging', 'production']).default('production'),\n  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),\n  \n  // Kafka Configuration\n  KAFKA_BROKER_URL: z.string().transform((val) => val.split(',').map(s => s.trim())),\n  KAFKA_CLIENT_ID: z.string().min(1),\n  KAFKA_GROUP_ID: z.string().min(1),\n  KAFKA_CONSUMER_TOPIC: z.string().min(1),\n  \n  // Security Configuration\n  HMAC_SECRET: z.string().min(64, 'HMAC_SECRET must be at least 64 characters long'),\n  \n  // Opossum Circuit Breaker Settings\n  CB_TIMEOUT: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(100)),\n  CB_THRESHOLD: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(1).max(100)),\n  CB_RESET_TIMEOUT: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(1000)),\n}).refine((data) => data.CB_THRESHOLD >= 1 && data.CB_THRESHOLD <= 100, {\n  message: \"CB_THRESHOLD must be a percentage between 1 and 100\",\n  path: [\"CB_THRESHOLD\"],\n});\n\n/**\n * Type-safe interface for the application configuration.\n */\nexport type AppConfig = z.infer<typeof envSchema>;\n\n/**\n * Parses and validates process.env against the defined schema.\n * If validation fails, it constructs a structured JSON response and terminates the process.\n * \n * @returns {AppConfig} The validated environment configuration.\n */\nconst parseEnv = (): AppConfig => {\n  const result = envSchema.safeParse(process.env);\n\n  if (!result.success) {\n    // Redaction strategy: Ensure sensitive fields are never logged.\n    // Zod issues contain the path, which is safe to log.\n    const errorDetails = result.error.issues.map((issue) => ({\n      path: issue.path.join('.'),\n      message: issue.message,\n    }));\n\n    // Use stderr for critical boot-time failures to ensure logging in observability tools.\n    process.stderr.write(\n      JSON.stringify({\n        level: 'critical',\n        message: 'Environment validation failed: System cannot boot with invalid configuration.',\n        errors: errorDetails,\n        timestamp: new Date().toISOString(),\n      }) + '\\n'\n    );\n\n    // Fail-fast strategy: terminate the process to prevent zombie states.\n    process.exit(1);\n  }\n\n  return result.data;\n};\n\n/**\n * The validated, immutable configuration object.\n * Acts as the singular source of truth for the inventory dispatch handler.\n */\nexport const config: Readonly<AppConfig> = Object.freeze(parseEnv());\n",
+      "timestamp": "2026-04-03T23:38:06.346859Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "F132388FB79D385BD9CCA08A07FF41EF2823B93EC3E8DCDF5D165EEA5769C3F6",
+    "timestamp": 1775259486
+  }
+}

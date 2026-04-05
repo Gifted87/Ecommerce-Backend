@@ -1,0 +1,31 @@
+{
+  "resilience_engine": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "7e735414f52f3e8f85f573f08b3e8e2b85e0a0d4c824c0840c8188145a8e0f5c",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of a CircuitBreakerFactory for standardized, production-ready infrastructure fault tolerance using Opossum and Zod.",
+      "filename": "circuit_breaker_factory.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/bootstrap/resilience/circuit_breaker_factory.ts",
+      "id": "577835a7-c48c-4b3d-968b-1d075b7cecec",
+      "provenance_data": {
+        "behaviour": "Creates and instruments Opossum circuit breakers for infrastructure operations with integrated structured logging, Zod validation, and configurable fallbacks.",
+        "interfaces": [
+          "create<T, A extends any[]>(name: string, action: (...args: A) => Promise<T>, fallback: (err: Error, ...args: A) => Promise<T>, config?: Partial<CircuitBreakerConfig>): CircuitBreaker"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a central mechanism for ensuring all infrastructure dependencies are wrapped in fault-tolerant logic to prevent cascading failures."
+      },
+      "source_code": "import CircuitBreaker from 'opossum';\nimport { Logger } from 'pino';\nimport { z } from 'zod';\n\n/**\n * Zod schema for enforcing strict circuit breaker configuration.\n */\nexport const CircuitBreakerConfigSchema = z.object({\n  timeout: z.number().int().positive().default(3000),\n  errorThresholdPercentage: z.number().min(0).max(100).default(50),\n  resetTimeout: z.number().int().positive().default(30000),\n});\n\nexport type CircuitBreakerConfig = z.infer<typeof CircuitBreakerConfigSchema>;\n\n/**\n * Factory for creating production-ready circuit breakers with integrated\n * logging, state monitoring, and standardized error handling.\n */\nexport class CircuitBreakerFactory {\n  private readonly logger: Logger;\n\n  constructor(logger: Logger) {\n    this.logger = logger.child({ module: 'CircuitBreakerFactory' });\n  }\n\n  /**\n   * Creates a new, configured, and instrumented CircuitBreaker.\n   * \n   * @param name - Human-readable name for the breaker (e.g., 'redis-cache-read').\n   * @param action - The asynchronous function to wrap with the breaker.\n   * @param fallback - The fallback function to invoke if the circuit is open or action fails.\n   * @param config - Configuration overrides for this specific breaker.\n   */\n  public create<T, A extends any[]>(\n    name: string,\n    action: (...args: A) => Promise<T>,\n    fallback: (err: Error, ...args: A) => Promise<T>,\n    config?: Partial<CircuitBreakerConfig>\n  ): CircuitBreaker {\n    const validatedConfig = CircuitBreakerConfigSchema.parse(config || {});\n    \n    const breaker = new CircuitBreaker(action, {\n      timeout: validatedConfig.timeout,\n      errorThresholdPercentage: validatedConfig.errorThresholdPercentage,\n      resetTimeout: validatedConfig.resetTimeout,\n    });\n\n    breaker.fallback(fallback);\n\n    // Instrument with structured logging\n    breaker.on('open', () => {\n      this.logger.error({ \n        breakerName: name, \n        state: 'open',\n        threshold: validatedConfig.errorThresholdPercentage \n      }, 'Circuit breaker opened: Infrastructure failure threshold exceeded.');\n    });\n\n    breaker.on('halfOpen', () => {\n      this.logger.warn({ \n        breakerName: name, \n        state: 'half-open' \n      }, 'Circuit breaker half-open: Probing infrastructure for recovery.');\n    });\n\n    breaker.on('close', () => {\n      this.logger.info({ \n        breakerName: name, \n        state: 'close' \n      }, 'Circuit breaker closed: Infrastructure restored.');\n    });\n\n    breaker.on('timeout', () => {\n      this.logger.warn({ \n        breakerName: name \n      }, 'Circuit breaker operation timed out.');\n    });\n\n    breaker.on('reject', () => {\n      this.logger.error({ \n        breakerName: name \n      }, 'Circuit breaker rejected call due to open state.');\n    });\n\n    return breaker;\n  }\n}",
+      "timestamp": "2026-04-03T23:19:38.468363Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "8D54EF423E2BFE10D4854D394EDADFFB386E00CEBBE66831A0BC185A0A94C1A0",
+    "timestamp": 1775258378
+  }
+}

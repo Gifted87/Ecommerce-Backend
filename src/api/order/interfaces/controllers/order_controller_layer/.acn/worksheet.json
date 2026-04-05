@@ -1,0 +1,33 @@
+{
+  "order_observability_controller_implementation": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "a2786a4805e269151240c5f0f379c676239121c324ef6e885d536c4b266a1a44",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of the Order System Observability Controller, facilitating health check and metrics exposure for system monitoring.",
+      "filename": "order_observability_controller.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/api/order/interfaces/controllers/order_observability_controller.ts",
+      "id": "b4ba8ab6-1fb8-4fcb-95eb-234a8d504e97",
+      "provenance_data": {
+        "behaviour": "The controller provides two read-only endpoints: /health for infrastructure readiness probing and /metrics for Prometheus-compatible observability. It integrates with ProactiveHealthAuditor for status aggregation and registry for metric collection. It follows non-blocking async patterns and maps system states to HTTP status codes.",
+        "interfaces": [
+          "getHealth(req: Request, res: Response): Promise<void>",
+          "getMetrics(req: Request, res: Response): Promise<void>",
+          "shutdown(): Promise<void>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Exposes essential monitoring data for the order interface layer, enabling production observability and load-balancer health probes."
+      },
+      "source_code": "import { Request, Response } from 'express';\nimport { Logger } from 'pino';\nimport { register, Registry } from 'prom-client';\nimport { ProactiveHealthAuditor } from '../../../infrastructure/health/proactive_health_auditor';\nimport { DistributedObservabilityInstrumenter } from '../../../infrastructure/observability/instrumenter';\n\n/**\n * OrderObservabilityController handles health checks and metrics exposure for the order service.\n * It is a stateless, singleton controller designed for high-concurrency environments.\n */\nexport class OrderObservabilityController {\n  private readonly registry: Registry;\n\n  constructor(\n    private readonly healthAuditor: ProactiveHealthAuditor,\n    private readonly instrumenter: DistributedObservabilityInstrumenter,\n    private readonly logger: Logger\n  ) {\n    this.registry = register;\n  }\n\n  /**\n   * Health Check endpoint. \n   * Returns:\n   * 200 OK: System is UP.\n   * 200 OK (with body status DEGRADED): System is DEGRADED.\n   * 503 Service Unavailable: System is DOWN.\n   */\n  public async getHealth(req: Request, res: Response): Promise<void> {\n    try {\n      const healthStatus = await this.healthAuditor.checkReady();\n      \n      this.logger.info({ healthStatus }, 'Health check performed');\n\n      let statusCode = 503;\n      if (healthStatus.status === 'UP' || healthStatus.status === 'DEGRADED') {\n        statusCode = 200;\n      }\n\n      res.status(statusCode).json(healthStatus);\n    } catch (error) {\n      this.logger.error({ error }, 'Health check internal failure');\n      res.status(503).json({\n        status: 'DOWN',\n        components: {},\n        timestamp: new Date().toISOString(),\n        error: 'Service unavailable'\n      });\n    }\n  }\n\n  /**\n   * Metrics endpoint.\n   * Exposes Prometheus metrics and custom business-level instrumentation.\n   */\n  public async getMetrics(req: Request, res: Response): Promise<void> {\n    try {\n      res.set('Content-Type', this.registry.contentType);\n      const metrics = await this.registry.metrics();\n      res.status(200).send(metrics);\n    } catch (error) {\n      this.logger.error({ error }, 'Failed to gather metrics');\n      res.status(500).send('Error gathering metrics');\n    }\n  }\n\n  /**\n   * Graceful shutdown handler to be hooked into the application lifecycle.\n   */\n  public async shutdown(): Promise<void> {\n    this.logger.info('Shutting down observability instrumentation');\n  }\n}\n",
+      "timestamp": "2026-04-03T23:35:06.486514Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "A85B9D402BF256F182B1F43BF7A7B60585C87E0A9989153639466747EC8DCEF4",
+    "timestamp": 1775259306
+  }
+}

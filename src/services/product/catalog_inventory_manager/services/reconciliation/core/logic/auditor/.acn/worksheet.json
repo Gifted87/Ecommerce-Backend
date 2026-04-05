@@ -1,0 +1,32 @@
+{
+  "auditor_engine": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "83b9c6a1e3d7a8c4f9e2b1a0d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of the DiscrepancyAuditorEngine for Stage 3 inventory reconciliation.",
+      "filename": "discrepancy_auditor_engine.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/services/reconciliation/core/logic/auditor/discrepancy_auditor_engine.ts",
+      "id": "82433307-61f9-42f5-bc05-009073384af9",
+      "provenance_data": {
+        "behaviour": "The DiscrepancyAuditorEngine evaluates inventory drift by comparing database snapshots with event-sourced expectations. It employs Opossum circuit breakers for resilience and ioredis for distributed locking to ensure SKU-level atomicity. Detected drifts are logged, and critical discrepancies trigger an exception for infrastructure alerting.",
+        "interfaces": [
+          "audit(actual: InventorySnapshot, expected: ExpectedInventoryState): Promise<AuditResult>",
+          "reconcile(actual: InventorySnapshot, expected: ExpectedInventoryState): Promise<StockReconciled>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides the final Stage 3 logical comparison and automatic reconciliation event generation, ensuring system integrity and alerting for critical state deviations."
+      },
+      "source_code": "import { Logger } from 'pino';\nimport Opossum from 'opossum';\nimport { Decimal } from 'decimal.js';\nimport { randomUUID } from 'crypto';\nimport { \n  InventorySnapshot, \n  StockReconciled, \n  ReconciliationRecordSchema \n} from '../../schemas/inventory_schemas';\nimport { ReconciliationCacheManager } from '../../cache/reconciliationCacheManager';\n\nexport interface ExpectedInventoryState {\n  productId: string;\n  totalStock: number;\n  reservedStock: number;\n}\n\nexport interface AuditResult {\n  isConsistent: boolean;\n  driftAmount: number;\n  reconciliationRecord: any;\n}\n\nexport class CriticalInconsistencyError extends Error {\n  constructor(public message: string, public productId: string, public drift: number) {\n    super(message);\n    this.name = 'CriticalInconsistencyError';\n  }\n}\n\nexport class DiscrepancyAuditorEngine {\n  private readonly breaker: Opossum;\n  private readonly driftThreshold = new Decimal('0.00');\n\n  constructor(\n    private readonly logger: Logger,\n    private readonly cacheManager: ReconciliationCacheManager\n  ) {\n    this.logger = this.logger.child({ module: 'services/reconciliation/auditor' });\n\n    this.breaker = new Opossum(async (fn: () => Promise<AuditResult>) => await fn(), {\n      timeout: 5000,\n      errorThresholdPercentage: 50,\n      resetTimeout: 30000,\n    });\n  }\n\n  public async audit(\n    actual: InventorySnapshot,\n    expected: ExpectedInventoryState\n  ): Promise<AuditResult> {\n    return await this.breaker.fire(async () => {\n      const actualTotal = new Decimal(actual.total_stock);\n      const expectedTotal = new Decimal(expected.totalStock);\n      const drift = actualTotal.minus(expectedTotal);\n\n      const isConsistent = drift.equals(this.driftThreshold);\n\n      const record = {\n        reconciliation_id: randomUUID(),\n        product_id: actual.product_id,\n        status: isConsistent ? 'SUCCESS' : 'DISCREPANCY_FOUND',\n        detected_at: new Date(),\n        audit_details: {\n          expected_total: expected.totalStock,\n          actual_total: actual.total_stock,\n          drift_amount: drift.toNumber(),\n        },\n      };\n\n      const validatedRecord = ReconciliationRecordSchema.parse(record);\n\n      if (!isConsistent) {\n        this.logger.warn({\n          msg: 'Drift detected in inventory reconciliation',\n          productId: actual.product_id,\n          drift: drift.toString(),\n          details: validatedRecord\n        });\n\n        if (Math.abs(drift.toNumber()) > 100) {\n          this.logger.error({\n            msg: 'CRITICAL_INCONSISTENCY',\n            productId: actual.product_id,\n            drift: drift.toString()\n          });\n          throw new CriticalInconsistencyError('Critical stock drift detected', actual.product_id, drift.toNumber());\n        }\n      }\n\n      return {\n        isConsistent,\n        driftAmount: drift.toNumber(),\n        reconciliationRecord: validatedRecord,\n      };\n    });\n  }\n\n  public async reconcile(\n    actual: InventorySnapshot,\n    expected: ExpectedInventoryState\n  ): Promise<StockReconciled> {\n    const lockAcquired = await this.cacheManager.lockSkuRange(actual.product_id);\n    if (!lockAcquired) {\n      throw new Error(`Unable to acquire lock for product ${actual.product_id}`);\n    }\n\n    try {\n      const result = await this.audit(actual, expected);\n\n      return {\n        header: {\n          idempotencyKey: randomUUID(),\n          timestamp: new Date().toISOString(),\n          version: '1.0.0',\n        },\n        payload: {\n          productId: actual.product_id,\n          previousTotal: actual.total_stock,\n          newTotal: expected.totalStock,\n          discrepancyDetected: !result.isConsistent,\n        },\n      };\n    } finally {\n      await this.cacheManager.releaseSkuRange(actual.product_id);\n    }\n  }\n}",
+      "timestamp": "2026-04-03T23:13:43.682566Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "0F80725B2047F2451DA9B22928D5E577FDD19734625BFBD7C42AA62F718A87AA",
+    "timestamp": 1775258023
+  }
+}

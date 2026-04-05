@@ -1,0 +1,31 @@
+{
+  "config_module": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "038ea3f16c90fe5a46f38332002a5747f6d422d2d6871607afc07fccca3ab9b4",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "The configuration module for the Kafka engine has been implemented with Zod-based environment validation, secure path resolution, and read-access verification for required SSL/TLS files.",
+      "filename": "config.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/infra/messaging/kafka_engine/config/config.ts",
+      "id": "58908012-c11c-43d6-8cb2-68aa1f6f050f",
+      "provenance_data": {
+        "behaviour": "Provides a secure, validated configuration object for the Kafka engine, ensuring environment variables are properly typed and files are readable. The configuration is cached and immutable for safe concurrent use.",
+        "interfaces": [
+          "loadConfig(): KafkaConfig"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Ensures that the application fails fast if configuration is missing or invalid, and provides a type-safe, immutable interface to the infrastructure settings."
+      },
+      "source_code": "import { z } from 'zod';\nimport fs from 'fs';\nimport path from 'path';\n\n/**\n * Configuration schema enforcing strict validation for Kafka connectivity.\n */\nconst kafkaEnvSchema = z.object({\n  BROKERS: z.string().min(1, 'BROKERS must be a comma-separated list of broker addresses'),\n  SASL_USERNAME: z.string().min(1, 'SASL_USERNAME must be provided'),\n  SASL_PASSWORD: z.string().min(1, 'SASL_PASSWORD must be provided'),\n  SSL_CA_FILE_PATH: z.string().min(1, 'SSL_CA_FILE_PATH must be provided'),\n  KAFKA_CLIENT_ID: z.string().min(1, 'KAFKA_CLIENT_ID must be provided'),\n  SASL_MECHANISM: z.enum(['plain', 'scram-sha-256', 'scram-sha-512']),\n});\n\n/**\n * Configuration structure for the Kafka Engine.\n */\nexport interface KafkaConfig {\n  brokers: string[];\n  clientId: string;\n  sasl: {\n    mechanism: 'plain' | 'scram-sha-256' | 'scram-sha-512';\n    username: string;\n    password: string;\n  };\n  ssl: {\n    ca: Buffer;\n  };\n}\n\nlet cachedConfig: KafkaConfig | null = null;\n\n/**\n * Loads and validates environment variables into a secure, immutable configuration object.\n * Throws an error if validation fails or if the CA certificate file is inaccessible.\n */\nexport function loadConfig(): KafkaConfig {\n  if (cachedConfig) {\n    return cachedConfig;\n  }\n\n  const result = kafkaEnvSchema.safeParse(process.env);\n\n  if (!result.success) {\n    const errorMessages = result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join(', ');\n    throw new Error(`Kafka Configuration Validation Failed: ${errorMessages}`);\n  }\n\n  const env = result.data;\n\n  // Validate CA file existence\n  const caFilePath = path.resolve(env.SSL_CA_FILE_PATH);\n  if (!fs.existsSync(caFilePath)) {\n    throw new Error(`SSL CA file not found at path: ${caFilePath}`);\n  }\n\n  let caBuffer: Buffer;\n  try {\n    caBuffer = fs.readFileSync(caFilePath);\n  } catch (err) {\n    throw new Error(`Failed to read SSL CA file at ${caFilePath}: ${(err as Error).message}`);\n  }\n\n  const config: KafkaConfig = {\n    brokers: env.BROKERS.split(',').map((broker) => broker.trim()),\n    clientId: env.KAFKA_CLIENT_ID,\n    sasl: {\n      mechanism: env.SASL_MECHANISM,\n      username: env.SASL_USERNAME,\n      password: env.SASL_PASSWORD,\n    },\n    ssl: {\n      ca: caBuffer,\n    },\n  };\n\n  // Ensure immutability for concurrency safety\n  cachedConfig = Object.freeze(config);\n  return cachedConfig;\n}\n",
+      "timestamp": "2026-04-03T21:54:09.319422Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "4474A6B0218207899AFFE2BF4D13EBE41D6644023482CB5694C3927C7A1457CF",
+    "timestamp": 1775253249
+  }
+}

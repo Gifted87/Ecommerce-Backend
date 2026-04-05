@@ -1,0 +1,33 @@
+{
+  "lifecycle_engine": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "e4a8b79f22513f1e912423c8e434f0580556214041b31a293933c06e885d5681",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of a robust LifecycleManager for graceful service shutdown.",
+      "filename": "lifecycle_manager.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/bootstrap/lifecycle/lifecycle_manager.ts",
+      "id": "3e30fa53-2421-4652-a322-2392e165635d",
+      "provenance_data": {
+        "behaviour": "Registers graceful shutdown signal handlers (SIGTERM/SIGINT) to orchestrate component cleanup in reverse order, ensuring system reliability and data integrity during process termination. Includes a safety watchdog timeout.",
+        "interfaces": [
+          "initialize(logger: Logger, shutdownTimeoutMs?: number): LifecycleManager",
+          "getInstance(): LifecycleManager",
+          "registerComponent(component: GracefulShutdownComponent): void"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a centralized orchestration point for service termination to prevent data loss and ensure infrastructure connectivity is gracefully released."
+      },
+      "source_code": "import { Logger } from 'pino';\n\n/**\n * Interface representing a component that can be gracefully shut down.\n */\nexport interface GracefulShutdownComponent {\n  name: string;\n  shutdown: () => Promise<void>;\n}\n\n/**\n * LifecycleManager handles the graceful shutdown of the service.\n * It registers signal handlers, orchestrates component shutdown,\n * and enforces a safety timeout to prevent process hanging.\n */\nexport class LifecycleManager {\n  private static instance: LifecycleManager;\n  private readonly components: GracefulShutdownComponent[] = [];\n  private isShuttingDown = false;\n  private readonly logger: Logger;\n  private readonly shutdownTimeoutMs: number;\n\n  private constructor(logger: Logger, shutdownTimeoutMs: number = 30000) {\n    this.logger = logger.child({ module: 'bootstrap/lifecycle' });\n    this.shutdownTimeoutMs = shutdownTimeoutMs;\n  }\n\n  public static initialize(logger: Logger, shutdownTimeoutMs: number = 30000): LifecycleManager {\n    if (!LifecycleManager.instance) {\n      LifecycleManager.instance = new LifecycleManager(logger, shutdownTimeoutMs);\n      LifecycleManager.instance.setupSignalHandlers();\n    }\n    return LifecycleManager.instance;\n  }\n\n  public static getInstance(): LifecycleManager {\n    if (!LifecycleManager.instance) {\n      throw new Error('LifecycleManager must be initialized before use.');\n    }\n    return LifecycleManager.instance;\n  }\n\n  /**\n   * Registers a component for the shutdown sequence.\n   */\n  public registerComponent(component: GracefulShutdownComponent): void {\n    this.components.push(component);\n  }\n\n  private setupSignalHandlers(): void {\n    process.once('SIGTERM', () => this.handleShutdown('SIGTERM'));\n    process.once('SIGINT', () => this.handleShutdown('SIGINT'));\n  }\n\n  private async handleShutdown(signal: string): Promise<void> {\n    if (this.isShuttingDown) {\n      this.logger.warn({ signal }, 'Shutdown sequence already initiated, ignoring subsequent signal');\n      return;\n    }\n\n    this.isShuttingDown = true;\n    this.logger.info({ signal }, 'SIGNALS_RECEIVED: Starting graceful shutdown sequence');\n\n    // Create a watchdog timer to force exit if components hang\n    const timer = setTimeout(() => {\n      this.logger.fatal('SHUTDOWN_TIMEOUT: Force exiting process due to timeout');\n      process.exit(1);\n    }, this.shutdownTimeoutMs);\n\n    // Shutdown all components in reverse order of registration\n    const componentsToShutdown = [...this.components].reverse();\n\n    const results = await Promise.allSettled(\n      componentsToShutdown.map(async (component) => {\n        this.logger.info({ component: component.name }, 'Shutting down component');\n        try {\n          await component.shutdown();\n          this.logger.info({ component: component.name }, 'Component shutdown complete');\n        } catch (error) {\n          this.logger.error({ component: component.name, error }, 'Error during component shutdown');\n          throw error;\n        }\n      })\n    );\n\n    clearTimeout(timer);\n\n    const failures = results.filter((r) => r.status === 'rejected');\n    if (failures.length > 0) {\n      this.logger.error({ failures: failures.length }, 'Some components failed to shut down gracefully');\n      process.exit(1);\n    }\n\n    this.logger.info('SHUTDOWN_COMPLETE: Process exiting successfully');\n    process.exit(0);\n  }\n}\n",
+      "timestamp": "2026-04-03T23:19:41.704991Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "23AB7E48A8C07A4E6AB61770725A36C5E5E3B48B55042BDFCEBFE59351404AE1",
+    "timestamp": 1775258381
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "api_routing": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "b7c936081518f8e79e6027a08b3a0e10461b4749f170c48e8945417387531776",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implemented Express router configuration for the User API, mapping endpoints to respective controllers and enforcing security middleware.",
+      "filename": "index.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/api/user/interface_layer/routing/index.ts",
+      "id": "22b6ed2c-2f08-4e24-836b-19942f995c60",
+      "provenance_data": {
+        "behaviour": "Defines routing for user lifecycle, profile, and MFA operations. Integrates with Express, auth middleware, and controller logic. Ensures all routes are protected (except registration) and correlation-ids are propagated.",
+        "interfaces": [
+          "createUserRouter(deps: RouterDependencies): Router"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides central API routing management, decoupling HTTP entry points from business logic controllers and ensuring standardized security enforcement via middleware."
+      },
+      "source_code": "import { Router, Request, Response, NextFunction } from 'express';\nimport { Redis } from 'ioredis';\nimport { Logger } from 'pino';\nimport { \n  UserRegistrationController, \n  UserProfileController, \n  MFAController \n} from '../controllers';\nimport { \n  createAuthMiddleware, \n  correlationMiddleware, \n  AuthMiddlewareOptions \n} from '../../middleware';\n\n/**\n * @fileoverview User API Routing Module.\n * Defines endpoints for user management, profiles, and MFA operations.\n */\n\nexport interface RouterDependencies {\n  redis: Redis;\n  logger: Logger;\n  userRegistrationController: UserRegistrationController;\n  userProfileController: UserProfileController;\n  mfaController: MFAController;\n}\n\n/**\n * Configures and returns the Express router for the User API.\n * \n * @param deps - Dependencies including controllers and infrastructure clients.\n * @returns {Router} Configured Express router.\n */\nexport const createUserRouter = (deps: RouterDependencies): Router => {\n  const router = Router();\n  const authMiddleware = createAuthMiddleware(deps.redis, deps.logger);\n\n  // Apply correlation tracking to all routes\n  router.use(correlationMiddleware);\n\n  /**\n   * POST /register\n   * Bypasses authentication. Registers a new user.\n   */\n  router.post('/register', async (req: Request, res: Response, next: NextFunction) => {\n    try {\n      await deps.userRegistrationController.register(req, res);\n    } catch (error) {\n      next(error);\n    }\n  });\n\n  /**\n   * GET /profile\n   * Requires authenticated user. Retrieves user profile.\n   */\n  router.get('/profile', authMiddleware(), async (req: Request, res: Response, next: NextFunction) => {\n    try {\n      await deps.userProfileController.getProfile(req, res);\n    } catch (error) {\n      next(error);\n    }\n  });\n\n  /**\n   * PATCH /profile\n   * Requires authenticated user. Updates user profile fields.\n   */\n  router.patch('/profile', authMiddleware(), async (req: Request, res: Response, next: NextFunction) => {\n    try {\n      await deps.userProfileController.updateProfile(req, res);\n    } catch (error) {\n      next(error);\n    }\n  });\n\n  /**\n   * POST /mfa/enable\n   * Requires authenticated user. Initiates MFA setup process.\n   */\n  router.post('/mfa/enable', authMiddleware(), async (req: Request, res: Response, next: NextFunction) => {\n    try {\n      await deps.mfaController.enable(req, res);\n    } catch (error) {\n      next(error);\n    }\n  });\n\n  /**\n   * POST /mfa/verify\n   * Requires authenticated user. Finalizes MFA activation.\n   */\n  router.post('/mfa/verify', authMiddleware(), async (req: Request, res: Response, next: NextFunction) => {\n    try {\n      await deps.mfaController.verify(req, res);\n    } catch (error) {\n      next(error);\n    }\n  });\n\n  return router;\n};\n",
+      "timestamp": "2026-04-03T23:31:21.302664Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "6CBDB83BD8B5DFDA369F400CF09455F02E2EF4A11293CE2212F4A7F0186A3831",
+    "timestamp": 1775259081
+  }
+}

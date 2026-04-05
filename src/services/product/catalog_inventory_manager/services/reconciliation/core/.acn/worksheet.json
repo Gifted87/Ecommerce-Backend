@@ -1,0 +1,31 @@
+{
+  "requirements_file": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "5b0c95d676a0a03043224773c355f3f0340b1717387f9502693e5065c52c6f13",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Created production-ready package.json for the inventory reconciliation core service including all necessary dependencies (knex, pg, ioredis, kafkajs, zod, pino, opossum).",
+      "filename": "package.json",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/services/reconciliation/core/package.json",
+      "id": "0170aed5-0e3d-4c58-bff8-442f482a16e7",
+      "provenance_data": {
+        "behaviour": "Defines the production-ready package.json with exact dependency versions for the reconciliation core. Ensures build, test, and migration scripts are aligned with backend standards.",
+        "interfaces": [
+          "scripts: build, start, lint, test, migrate"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides the foundation for the reconciliation service, ensuring all infrastructure drivers are present and pinned to production versions."
+      },
+      "source_code": "{\n  \"name\": \"@acn/reconciliation-core\",\n  \"version\": \"1.0.0\",\n  \"description\": \"Production-ready mission-critical inventory audit and reconciliation service\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"engines\": {\n    \"node\": \">=20.0.0\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/index.js\",\n    \"lint\": \"eslint 'src/**/*.ts'\",\n    \"test\": \"jest\",\n    \"migrate\": \"knex migrate:latest\"\n  },\n  \"author\": \"ACN Actuator\",\n  \"license\": \"UNLICENSED\",\n  \"dependencies\": {\n    \"dotenv\": \"16.4.5\",\n    \"ioredis\": \"5.4.1\",\n    \"kafkajs\": \"2.2.4\",\n    \"knex\": \"3.1.0\",\n    \"opossum\": \"8.3.1\",\n    \"pg\": \"8.12.0\",\n    \"pino\": \"9.3.2\",\n    \"pino-pretty\": \"11.2.2\",\n    \"zod\": \"3.23.8\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"29.5.12\",\n    \"@types/node\": \"20.14.10\",\n    \"@typescript-eslint/eslint-plugin\": \"7.14.1\",\n    \"@typescript-eslint/parser\": \"7.14.1\",\n    \"eslint\": \"8.57.0\",\n    \"jest\": \"29.7.0\",\n    \"ts-jest\": \"29.1.5\",\n    \"typescript\": \"5.5.3\"\n  }\n}",
+      "timestamp": "2026-04-03T23:10:18.977671Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "0F6D892FA452BD273C1DDCDA6BF2BD315B6CA3F21FC3A27E38ECA6588CBAC3B8",
+    "timestamp": 1775257818
+  }
+}

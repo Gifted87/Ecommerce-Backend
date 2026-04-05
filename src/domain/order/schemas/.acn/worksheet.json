@@ -1,0 +1,38 @@
+{
+  "domain_order_schema": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "f6d892019954d6f830c23940c345389659a0e66d9884e9d682496a84d4367f08",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Defined Order domain schemas and state machine for order lifecycle management.",
+      "filename": "order_schemas.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/domain/order/schemas/order_schemas.ts",
+      "id": "f38d2d57-8154-4547-81ef-d66276a56fd9",
+      "provenance_data": {
+        "behaviour": "Defines immutable order states, valid state machine transition logic, and Zod schemas for order data persistence and request validation. Ensures strict typing and format validation for ecommerce order lifecycle.",
+        "interfaces": [
+          "OrderStatus (enum)",
+          "OrderTransitions (constant)",
+          "OrderItemSchema (Zod)",
+          "ShippingAddressSchema (Zod)",
+          "OrderRequestSchema (Zod)",
+          "OrderModelSchema (Zod)",
+          "validateStateTransition(currentStatus: OrderStatus, nextStatus: OrderStatus, context?: { tracking_number?: string })",
+          "parseOrderRequest(data: unknown)"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides strict type-safe domain schemas and a validated state machine for the Order domain, essential for maintaining transactional integrity and data consistency in the ecommerce backend."
+      },
+      "source_code": "import { z } from 'zod';\n\n/**\n * @fileoverview Order and Checkout Domain Schemas.\n * Acts as the single source of truth for order lifecycle and validation.\n */\n\n/**\n * Supported Order States\n */\nexport enum OrderStatus {\n  PENDING = 'PENDING',\n  PAID = 'PAID',\n  SHIPPED = 'SHIPPED',\n  DELIVERED = 'DELIVERED',\n  CANCELLED = 'CANCELLED',\n  REFUNDED = 'REFUNDED',\n}\n\n/**\n * Valid state transitions mapping\n */\nexport const OrderTransitions: Record<OrderStatus, OrderStatus[]> = {\n  [OrderStatus.PENDING]: [OrderStatus.PAID, OrderStatus.CANCELLED],\n  [OrderStatus.PAID]: [OrderStatus.SHIPPED, OrderStatus.CANCELLED, OrderStatus.REFUNDED],\n  [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED],\n  [OrderStatus.DELIVERED]: [],\n  [OrderStatus.CANCELLED]: [],\n  [OrderStatus.REFUNDED]: [],\n};\n\n/**\n * Zod schema for an individual Order Item\n */\nexport const OrderItemSchema = z.object({\n  sku: z.string().min(1, 'SKU is required'),\n  quantity: z.number().int().positive('Quantity must be a positive integer'),\n  unit_price: z.string().regex(/^\\d+(\\.\\d{1,2})?$/, 'Unit price must be a valid decimal string'),\n  item_total: z.string().regex(/^\\d+(\\.\\d{1,2})?$/, 'Item total must be a valid decimal string'),\n});\n\nexport type OrderItem = z.infer<typeof OrderItemSchema>;\n\n/**\n * Zod schema for shipping information\n * Separated to handle potential PII in a dedicated security context\n */\nexport const ShippingAddressSchema = z.object({\n  street: z.string().min(1, 'Street is required'),\n  city: z.string().min(1, 'City is required'),\n  postal_code: z.string().min(1, 'Postal code is required'),\n  country: z.string().length(2, 'Use ISO 3166-1 alpha-2 country code'),\n});\n\nexport type ShippingAddress = z.infer<typeof ShippingAddressSchema>;\n\n/**\n * Zod schema for initial Order Request\n */\nexport const OrderRequestSchema = z.object({\n  user_id: z.string().uuid('Invalid user ID format'),\n  items: z.array(OrderItemSchema).min(1, 'Order must contain at least one item'),\n  shipping_address: ShippingAddressSchema,\n  payment_token: z.string().min(1, 'Payment token is required'),\n});\n\nexport type OrderRequest = z.infer<typeof OrderRequestSchema>;\n\n/**\n * Zod schema for internal persistence Order Model\n */\nexport const OrderModelSchema = z.object({\n  order_id: z.string().uuid(),\n  user_id: z.string().uuid(),\n  status: z.nativeEnum(OrderStatus),\n  items: z.array(OrderItemSchema),\n  shipping_address: ShippingAddressSchema,\n  total_amount: z.string().regex(/^\\d+(\\.\\d{1,2})?$/),\n  tracking_number: z.string().optional(),\n  created_at: z.date(),\n  updated_at: z.date(),\n});\n\nexport type OrderModel = z.infer<typeof OrderModelSchema>;\n\n/**\n * Validates a state transition.\n * @param currentStatus The current order status.\n * @param nextStatus The intended target status.\n * @param context Additional context required for specific transitions (e.g., tracking number for SHIPPED).\n * @returns { valid: boolean, error?: string }\n */\nexport const validateStateTransition = (\n  currentStatus: OrderStatus,\n  nextStatus: OrderStatus,\n  context?: { tracking_number?: string }\n): { valid: boolean; error?: string } => {\n  const allowed = OrderTransitions[currentStatus];\n\n  if (!allowed.includes(nextStatus)) {\n    return {\n      valid: false,\n      error: `INVALID_TRANSITION: Cannot transition from ${currentStatus} to ${nextStatus}`,\n    };\n  }\n\n  if (nextStatus === OrderStatus.SHIPPED) {\n    if (!context?.tracking_number || context.tracking_number.trim().length === 0) {\n      return {\n        valid: false,\n        error: 'MISSING_FULFILLMENT_INFO: SHIPPED state requires a tracking number',\n      };\n    }\n  }\n\n  return { valid: true };\n};\n\n/**\n * Helper to safely parse OrderRequest\n */\nexport const parseOrderRequest = (data: unknown) => {\n  return OrderRequestSchema.safeParse(data);\n};\n",
+      "timestamp": "2026-04-03T23:01:07.421711Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "AE49ED4825E449025C0DF036E0750796570EFA3202B9682D03D95FB8B68E629B",
+    "timestamp": 1775257267
+  }
+}

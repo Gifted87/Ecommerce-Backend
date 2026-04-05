@@ -1,0 +1,32 @@
+{
+  "interface_suite": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "6d4a520112836423984534731389472398471239847129384712938471239847",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Defines the interface suite for the Kafka messaging engine, including EventMetadata, Producer/Consumer interfaces, and lifecycle states.",
+      "filename": "interfaces.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/infra/messaging/kafka_engine/interfaces/interfaces.ts",
+      "id": "17678c4c-cbc5-4c75-9426-402932e449ab",
+      "provenance_data": {
+        "behaviour": "Defines strongly-typed interfaces for Kafka producer and consumer operations, ensuring schema-validated event communication with correlation tracking and lifecycle management.",
+        "interfaces": [
+          "IProducer<T>: initialize(): Promise<void>; connect(): Promise<void>; send(topic: string, payload: EventPayload<T>, schema: ZodSchema<T>): Promise<ProducerReceipt>; disconnect(): Promise<void>;",
+          "IConsumer<T>: initialize(groupId: string): Promise<void>; connect(): Promise<void>; subscribe(topic: string, fromBeginning?: boolean): Promise<void>; poll(handler: IEventHandler<T>, schema: ZodSchema<T>): Promise<void>; commitOffset(topic: string, partition: number, offset: string): Promise<void>; disconnect(): Promise<void>;"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a strictly typed contract for implementing production-grade Kafka messaging, ensuring schema validation and traceability."
+      },
+      "source_code": "import { ZodSchema } from 'zod';\n\n/**\n * Metadata for traceability and observability across distributed transactions.\n */\nexport interface EventMetadata {\n  correlationId: string;\n  timestamp: Date;\n  sourceService: string;\n}\n\n/**\n * Standardized payload structure for all Kafka events.\n */\nexport interface EventPayload<T> {\n  metadata: EventMetadata;\n  data: T;\n}\n\n/**\n * Receipt returned after successful message production.\n */\nexport interface ProducerReceipt {\n  topic: string;\n  partition: number;\n  offset: string;\n  timestamp: string;\n}\n\n/**\n * Configuration for SASL/SSL credentials.\n */\nexport interface AuthProvider {\n  saslUsername?: string;\n  saslPassword?: string;\n  sslCa?: string | Buffer;\n}\n\n/**\n * Handler interface for consuming events.\n */\nexport type IEventHandler<T> = (payload: EventPayload<T>) => Promise<void>;\n\n/**\n * Producer interface for sending validated events.\n */\nexport interface IProducer<T> {\n  initialize(): Promise<void>;\n  connect(): Promise<void>;\n  send(topic: string, payload: EventPayload<T>, schema: ZodSchema<T>): Promise<ProducerReceipt>;\n  disconnect(): Promise<void>;\n}\n\n/**\n * Consumer interface for event subscription and lifecycle management.\n */\nexport interface IConsumer<T> {\n  initialize(groupId: string): Promise<void>;\n  connect(): Promise<void>;\n  subscribe(topic: string, fromBeginning?: boolean): Promise<void>;\n  poll(handler: IEventHandler<T>, schema: ZodSchema<T>): Promise<void>;\n  commitOffset(topic: string, partition: number, offset: string): Promise<void>;\n  disconnect(): Promise<void>;\n}\n\n/**\n * Explicit lifecycle states for messaging components.\n */\nexport enum MessagingState {\n  INITIALIZED = 'INITIALIZED',\n  CONNECTED = 'CONNECTED',\n  SUBSCRIBED = 'SUBSCRIBED',\n  POLLING = 'POLLING',\n  COMMITTING = 'COMMITTING',\n  DISCONNECTED = 'DISCONNECTED',\n  FAILED = 'FAILED',\n}\n",
+      "timestamp": "2026-04-03T21:54:09.660441Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "0353BA3A800E82B8B1A34228696C8540C99714BC66A6EEE0C0C9C132D9D2E4DD",
+    "timestamp": 1775253249
+  }
+}

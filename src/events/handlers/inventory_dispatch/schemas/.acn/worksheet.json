@@ -1,0 +1,38 @@
+{
+  "inventory_dispatch_schemas_module": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "f5c0c926c8b939f60f6d895521b297b4a2408c01d9f8e43e2646d7950c441a1a",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implemented complete, production-ready Zod validation schemas for inventory-related events (Reserved, Released, Adjusted, Snapshot) and application configuration. Includes custom error handling and PII redaction utilities.",
+      "filename": "index.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/events/handlers/inventory_dispatch/schemas/index.ts",
+      "id": "dc10857b-0981-4429-83d1-f750b745f890",
+      "provenance_data": {
+        "behaviour": "Provides centralized, type-safe Zod validation schemas for inventory event payloads and application configuration, including domain invariant enforcement for stock levels.",
+        "interfaces": [
+          "EventHeaderSchema: ZodObject",
+          "InventoryReservedSchema: ZodObject",
+          "InventoryReleasedSchema: ZodObject",
+          "InventoryAdjustedSchema: ZodObject",
+          "InventorySnapshotSchema: ZodObject",
+          "AppConfigSchema: ZodObject",
+          "redactSensitiveData(data: T): T",
+          "ValidationFailedError: Class"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides type-safe, validated data contracts for the Inventory service, preventing malformed data from propagating through the event-driven architecture and enforcing business invariants at the edge."
+      },
+      "source_code": "import { z } from 'zod';\n\n/**\n * @fileoverview Inventory Event Schemas and Configuration Validation.\n * Defines authoritative domain models for the Inventory service.\n */\n\n// --- Constants ---\nconst SEMVER_REGEX = /^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$/;\n\n// --- Standard Header ---\nexport const EventHeaderSchema = z.object({\n  idempotencyKey: z.string().uuid(),\n  timestamp: z.string().datetime(),\n  version: z.string().regex(SEMVER_REGEX, 'Version must follow semver format (major.minor.patch)'),\n});\n\n// --- Event Payloads ---\n\nexport const InventoryReservedSchema = z.object({\n  header: EventHeaderSchema,\n  payload: z.object({\n    productId: z.string().uuid(),\n    orderId: z.string().uuid(),\n    quantity: z.number().int().positive(),\n    reason: z.string().min(1),\n  }),\n});\n\nexport const InventoryReleasedSchema = z.object({\n  header: EventHeaderSchema,\n  payload: z.object({\n    productId: z.string().uuid(),\n    orderId: z.string().uuid(),\n    quantity: z.number().int().positive(),\n    reason: z.string().min(1),\n  }),\n});\n\nexport const InventoryAdjustedSchema = z.object({\n  header: EventHeaderSchema,\n  payload: z.object({\n    productId: z.string().uuid(),\n    adjustment: z.number().int(),\n    reason: z.string().min(1),\n  }),\n});\n\nexport const InventorySnapshotSchema = z.object({\n  header: EventHeaderSchema,\n  payload: z.object({\n    productId: z.string().uuid(),\n    totalStock: z.number().int().nonnegative(),\n    reservedStock: z.number().int().nonnegative(),\n  }).refine((data) => data.totalStock >= data.reservedStock, {\n    message: 'Domain Invariant Violation: totalStock must be >= reservedStock',\n    path: ['totalStock'],\n  }),\n});\n\n// --- Configuration Schema ---\n\nexport const AppConfigSchema = z.object({\n  KAFKA_BROKER_URI: z.string().url(),\n  HMAC_SECRET: z.string().min(32, 'HMAC secret must be at least 32 characters'),\n  DB_CONNECTION_STRING: z.string().startsWith('postgresql://'),\n  CIRCUIT_BREAKER_TIMEOUT_MS: z.preprocess((v) => parseInt(v as string, 10), z.number().positive()),\n  CIRCUIT_BREAKER_ERROR_THRESHOLD: z.preprocess((v) => parseInt(v as string, 10), z.number().positive()),\n  CIRCUIT_BREAKER_RESET_TIMEOUT_MS: z.preprocess((v) => parseInt(v as string, 10), z.number().positive()),\n});\n\n// --- Types ---\n\nexport type InventoryReserved = z.infer<typeof InventoryReservedSchema>;\nexport type InventoryReleased = z.infer<typeof InventoryReleasedSchema>;\nexport type InventoryAdjusted = z.infer<typeof InventoryAdjustedSchema>;\nexport type InventorySnapshot = z.infer<typeof InventorySnapshotSchema>;\nexport type AppConfig = z.infer<typeof AppConfigSchema>;\n\n// --- Error Handling ---\n\nexport class ValidationFailedError extends Error {\n  constructor(public errors: z.ZodIssue[]) {\n    super('Event validation failed');\n    this.name = 'ValidationFailedError';\n  }\n}\n\n// --- Redaction Utilities ---\n\nexport const redactSensitiveData = <T extends Record<string, any>>(data: T): T => {\n  const redacted = { ...data };\n  const sensitiveKeys = ['userId', 'internalToken', 'password', 'authToken', 'secret'];\n  \n  for (const key of sensitiveKeys) {\n    if (key in redacted) {\n      redacted[key] = '[REDACTED]';\n    }\n  }\n  \n  return redacted;\n};\n",
+      "timestamp": "2026-04-03T23:38:13.086486Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "AAADAC2D9A053F91777ED9FE6551FC72513B33671755374C78C53BB544DBA759",
+    "timestamp": 1775259493
+  }
+}

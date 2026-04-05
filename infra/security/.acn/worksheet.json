@@ -1,0 +1,37 @@
+{
+  "security_infrastructure_module": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "F663F73F048E2D5B8EAB3E865356B7572DCECA80016AD613D75E9A65B84532A3",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of a secure cryptographic engine for the ecommerce backend using AES-256-GCM, Argon2id, and RS256.",
+      "filename": "security_engine.js",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/infra/security/security_engine.js",
+      "id": "6221267c-b0c3-411d-abc7-d800b0b2c934",
+      "provenance_data": {
+        "behaviour": "Provides AES-256-GCM encryption/decryption, Argon2id password hashing/verification, and RS256 JWT signing/verification. Side effects include secure data transformation and authentication state management.",
+        "interfaces": [
+          "SecurityEngine(encryptionKey, privateKey, publicKey)",
+          "hashPassword(password) -> Promise<string>",
+          "verifyPassword(hash, password) -> Promise<boolean>",
+          "encrypt(text) -> string",
+          "decrypt(encryptedData) -> string",
+          "generateToken(payload, expiresIn) -> string",
+          "verifyToken(token) -> object"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a robust, production-ready security layer handling encryption, hashing, and token management for the ecommerce backend, satisfying strict security and compliance requirements."
+      },
+      "source_code": "const crypto = require('crypto');\nconst argon2 = require('argon2');\nconst jwt = require('jsonwebtoken');\n\nclass SecurityError extends Error {\n  constructor(message, code) {\n    super(message);\n    this.name = 'SecurityError';\n    this.code = code;\n  }\n}\n\nclass EncryptionError extends SecurityError {\n  constructor(message) {\n    super(message, 'ERR_ENCRYPTION');\n  }\n}\n\nclass DecryptionError extends SecurityError {\n  constructor(message) {\n    super(message, 'ERR_DECRYPTION');\n  }\n}\n\nclass ValidationError extends SecurityError {\n  constructor(message) {\n    super(message, 'ERR_VALIDATION');\n  }\n}\n\nclass AuthenticationError extends SecurityError {\n  constructor(message) {\n    super(message, 'ERR_AUTHENTICATION');\n  }\n}\n\nclass SecurityEngine {\n  constructor(encryptionKey, privateKey, publicKey) {\n    if (!encryptionKey || encryptionKey.length !== 32) {\n      throw new ValidationError('Encryption key must be a 32-byte buffer or 32-character string');\n    }\n    this.encryptionKey = Buffer.from(encryptionKey);\n    this.privateKey = privateKey;\n    this.publicKey = publicKey;\n    this.algorithm = 'aes-256-gcm';\n  }\n\n  /**\n   * Password Hashing (Argon2id)\n   */\n  async hashPassword(password) {\n    try {\n      return await argon2.hash(password, {\n        type: argon2.argon2id,\n        memoryCost: 64 * 1024,\n        parallelism: 4,\n        timeCost: 3,\n      });\n    } catch (err) {\n      throw new ValidationError('Failed to hash password');\n    }\n  }\n\n  async verifyPassword(hash, password) {\n    try {\n      return await argon2.verify(hash, password, {\n        type: argon2.argon2id,\n      });\n    } catch (err) {\n      throw new AuthenticationError('Password verification failed');\n    }\n  }\n\n  /**\n   * Data Encryption (AES-256-GCM)\n   */\n  encrypt(text) {\n    try {\n      const iv = crypto.randomBytes(12);\n      const cipher = crypto.createCipheriv(this.algorithm, this.encryptionKey, iv);\n      const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);\n      const tag = cipher.getAuthTag();\n      \n      return Buffer.concat([iv, tag, encrypted]).toString('base64');\n    } catch (err) {\n      throw new EncryptionError('Encryption failed');\n    }\n  }\n\n  decrypt(encryptedData) {\n    try {\n      const buffer = Buffer.from(encryptedData, 'base64');\n      const iv = buffer.subarray(0, 12);\n      const tag = buffer.subarray(12, 28);\n      const ciphertext = buffer.subarray(28);\n\n      const decipher = crypto.createDecipheriv(this.algorithm, this.encryptionKey, iv);\n      decipher.setAuthTag(tag);\n      \n      const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);\n      return decrypted.toString('utf8');\n    } catch (err) {\n      throw new DecryptionError('Decryption failed: Invalid tag or data corruption');\n    }\n  }\n\n  /**\n   * Identity Management (JWT / RS256)\n   */\n  generateToken(payload, expiresIn = '15m') {\n    try {\n      return jwt.sign(payload, this.privateKey, {\n        algorithm: 'RS256',\n        expiresIn: expiresIn,\n      });\n    } catch (err) {\n      throw new AuthenticationError('Failed to sign token');\n    }\n  }\n\n  verifyToken(token) {\n    try {\n      return jwt.verify(token, this.publicKey, {\n        algorithms: ['RS256'],\n      });\n    } catch (err) {\n      throw new AuthenticationError('Invalid or expired token');\n    }\n  }\n}\n\nmodule.exports = {\n  SecurityEngine,\n  SecurityError,\n  EncryptionError,\n  DecryptionError,\n  ValidationError,\n  AuthenticationError\n};\n",
+      "timestamp": "2026-04-03T21:52:47.872651Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "33242E445718B41926D51479AEBD3F986F65E83BCCAFA0A4A717614A377299A0",
+    "timestamp": 1775253167
+  }
+}

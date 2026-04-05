@@ -1,0 +1,35 @@
+{
+  "database_infrastructure_module": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "328ab97544a9e882045a012ecca97d95158939e40332c20cfdd2030f16c893db",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of production-grade PostgreSQL and Redis infrastructure modules with resilience and observability.",
+      "filename": "db_client.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/infra/database/db_client.ts",
+      "id": "3acae24b-22c7-4fa1-91aa-1c4023ff47d1",
+      "provenance_data": {
+        "behaviour": "Initializes PostgreSQL client via Prisma and Redis client via ioredis with TLS, circuit breaker protection (Opossum), and structured logging (Pino). Implements transactional wrappers and health checks.",
+        "interfaces": [
+          "prisma: PrismaClient",
+          "redis: Redis",
+          "queryBreaker: CircuitBreaker",
+          "executeInTransaction<T>(work: (client: any) => Promise<T>): Promise<T>",
+          "checkConnectivity(): Promise<void>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a centralized, resilient, and production-ready interface for PostgreSQL and Redis interactions, ensuring ACID compliance and observability."
+      },
+      "source_code": "import { PrismaClient } from '@prisma/client';\nimport Redis from 'ioredis';\nimport CircuitBreaker from 'opossum';\nimport pino from 'pino';\n\nconst logger = pino({ level: process.env.LOG_LEVEL || 'info' });\n\n/**\n * Singleton database client wrapper for production-grade operations.\n * Handles Prisma (PostgreSQL) and ioredis (Redis) with resilience, circuit breakers,\n * and observability.\n */\n\n// --- Prisma Initialization ---\nconst prismaOptions = {\n  log: [\n    { emit: 'event', level: 'query' },\n    { emit: 'stdout', level: 'warn' },\n  ],\n  datasources: {\n    db: {\n      url: process.env.DATABASE_URL || '',\n    },\n  },\n};\n\nexport const prisma = new PrismaClient(prismaOptions);\n\n// @ts-ignore\nprisma.$on('query', (e: any) => {\n  if (e.duration > parseInt(process.env.QUERY_THRESHOLD_MS || '500', 10)) {\n    logger.warn({\n      query: e.query,\n      params: e.params,\n      duration: e.duration,\n      correlationId: 'N/A', // Middleware to inject via AsyncLocalStorage\n    }, 'Slow Query Detected');\n  }\n});\n\n// --- Redis Initialization ---\nconst redisConfig = {\n  host: process.env.REDIS_HOST || 'localhost',\n  port: parseInt(process.env.REDIS_PORT || '6379', 10),\n  password: process.env.REDIS_PASSWORD,\n  tls: {\n    rejectUnauthorized: true,\n  },\n  retryStrategy: (times: number) => {\n    const delay = Math.min(times * 50, 2000);\n    return delay;\n  },\n};\n\nexport const redis = new Redis(redisConfig);\n\nredis.on('error', (err) => {\n  logger.error({ err }, 'Redis connection error');\n});\n\nredis.on('connect', () => {\n  logger.info('Redis connected successfully');\n});\n\n// --- Resilience / Circuit Breaker Layer ---\nconst breakerOptions = {\n  timeout: 3000,\n  errorThresholdPercentage: 50,\n  resetTimeout: 30000,\n};\n\nexport const queryBreaker = new CircuitBreaker(async (queryFn: () => Promise<any>) => {\n  return await queryFn();\n}, breakerOptions);\n\nqueryBreaker.on('open', () => logger.error('Database circuit breaker opened'));\nqueryBreaker.on('halfOpen', () => logger.warn('Database circuit breaker half-open'));\nqueryBreaker.on('close', () => logger.info('Database circuit breaker closed'));\n\n/**\n * Executes a database operation within a strict ACID transaction.\n * Ensures robust error handling and observability.\n */\nexport async function executeInTransaction<T>(work: (client: any) => Promise<T>): Promise<T> {\n  return await prisma.$transaction(async (tx) => {\n    try {\n      return await work(tx);\n    } catch (error) {\n      logger.error({ error }, 'Transaction failed');\n      throw error;\n    }\n  });\n}\n\n/**\n * Deep check for connectivity at service startup.\n */\nexport async function checkConnectivity(): Promise<void> {\n  try {\n    await prisma.$queryRaw`SELECT 1`;\n    logger.info('Database health check passed');\n  } catch (error) {\n    logger.fatal('Database connectivity failed');\n    process.exit(1);\n  }\n\n  try {\n    await redis.ping();\n    logger.info('Redis health check passed');\n  } catch (error) {\n    logger.fatal('Redis connectivity failed');\n    process.exit(1);\n  }\n}\n",
+      "timestamp": "2026-04-03T21:52:40.692750Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "FB782BDAF251AB7AEEB49829CE1C9A954F4923CCC1A313FC8265D7D8B515866F",
+    "timestamp": 1775253160
+  }
+}

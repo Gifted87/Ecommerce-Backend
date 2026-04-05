@@ -1,0 +1,36 @@
+{
+  "module_entry_point": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "773B064946DB0C2723A75706180400646CA18DD44512026026753504E8572695",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Exports all components of the Authentication and MFA module to provide a unified entry point.",
+      "filename": "index.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/user/auth_mfa_module/index.ts",
+      "id": "4b63bbd9-882c-44e2-a2a3-4d10f279d415",
+      "provenance_data": {
+        "behaviour": "Exposes the public API for the Authentication and MFA module, ensuring encapsulation of services, controllers, and middleware.",
+        "interfaces": [
+          "export * from './types'",
+          "export { AuthService } from './auth_service'",
+          "export { MfaService } from './mfa_service'",
+          "export { AuthController } from './auth_controller'",
+          "export { MfaController } from './mfa_controller'",
+          "export { AuthMiddleware } from './auth_middleware'"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a clean, centralized interface for the module, simplifying imports for the application layer."
+      },
+      "source_code": "/**\n * @fileoverview Public API surface for the Authentication and MFA module.\n * Provides orchestrated access to services, controllers, and middleware,\n * enforcing strict encapsulation and type safety across the microservice.\n */\n\nexport * from './types';\nexport { AuthService } from './auth_service';\nexport { MfaService } from './mfa_service';\nexport { AuthController } from './auth_controller';\nexport { MfaController } from './mfa_controller';\nexport { AuthMiddleware } from './auth_middleware';\n",
+      "timestamp": "2026-04-03T23:10:50.520369Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "21577B195B40EB251E9B070724F9D266D4C0E1C57E554512DAC5666CC1132C63",
+    "timestamp": 1775257850
+  }
+}

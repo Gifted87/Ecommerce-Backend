@@ -1,0 +1,31 @@
+{
+  "checkout_processor_service_impl": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "7d4a1b9e8c3f2d1a5b6c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of the CheckoutProcessorService class for atomic and fault-tolerant order checkout orchestration.",
+      "filename": "CheckoutProcessorService.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/order/checkout_processor/service/CheckoutProcessorService.ts",
+      "id": "b732452f-8e88-4a5a-a464-abb02c12ca7e",
+      "provenance_data": {
+        "behaviour": "The service provides a robust, circuit-breaker protected entry point for checkout, ensuring atomic state transitions via distributed locking and idempotent event publication.",
+        "interfaces": [
+          "processCheckout(data: unknown): Promise<{ success: boolean; orderId: string }>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a highly-available, transactional, and observable service entry point for checkout processing."
+      },
+      "source_code": "import { z } from 'zod';\nimport { Logger } from 'pino';\nimport CircuitBreaker from 'opossum';\nimport { StateManager } from '../state/StateManager';\nimport { CheckoutEventProducer } from '../events/CheckoutEventProducer';\n\n/**\n * Schema for checkout input validation.\n */\nexport const CheckoutSchema = z.object({\n  orderId: z.string().uuid(),\n  userId: z.string().uuid(),\n  items: z.array(z.object({\n    productId: z.string().uuid(),\n    quantity: z.number().int().positive(),\n    price: z.number().positive(),\n  })),\n  totalAmount: z.number().positive(),\n  correlationId: z.string().uuid(),\n});\n\nexport type CheckoutInput = z.infer<typeof CheckoutSchema>;\n\n/**\n * Service orchestrating the checkout process lifecycle.\n * Manages state transition atomicity, concurrency control, and event publication.\n */\nexport class CheckoutProcessorService {\n  private readonly breaker: CircuitBreaker;\n\n  constructor(\n    private readonly stateManager: StateManager,\n    private readonly eventProducer: CheckoutEventProducer,\n    private readonly logger: Logger\n  ) {\n    // Initialize circuit breaker for external dependencies (Redis/DB)\n    const options = {\n      timeout: 5000,\n      errorThresholdPercentage: 50,\n      resetTimeout: 30000,\n    };\n    \n    this.breaker = new CircuitBreaker(this.executeCheckoutFlow.bind(this), options);\n    \n    this.breaker.on('open', () => this.logger.error('Circuit breaker opened for checkout process.'));\n    this.breaker.on('halfOpen', () => this.logger.warn('Circuit breaker half-open for checkout process.'));\n    this.breaker.on('close', () => this.logger.info('Circuit breaker closed for checkout process.'));\n  }\n\n  /**\n   * Main entry point for processing a checkout request.\n   */\n  public async processCheckout(data: unknown): Promise<{ success: boolean; orderId: string }> {\n    const validatedData = CheckoutSchema.safeParse(data);\n\n    if (!validatedData.success) {\n      this.logger.error({ msg: 'Invalid checkout request payload', error: validatedData.error });\n      throw new Error('400 Bad Request: Invalid input schema.');\n    }\n\n    try {\n      return await this.breaker.fire(validatedData.data);\n    } catch (error) {\n      this.logger.error({ \n        msg: 'Checkout process failed', \n        error: error instanceof Error ? error.message : String(error),\n        orderId: (data as any)?.orderId \n      });\n      throw error;\n    }\n  }\n\n  /**\n   * Internal implementation of the checkout lifecycle.\n   */\n  private async executeCheckoutFlow(order: CheckoutInput): Promise<{ success: boolean; orderId: string }> {\n    const { orderId, correlationId } = order;\n    this.logger.info({ msg: 'Starting checkout process', orderId, correlationId });\n\n    // 1. Acquire Distributed Lock\n    const lockKey = `lock:order:${orderId}`;\n    const acquired = await this.stateManager.acquireLock(lockKey, 10000);\n    \n    if (!acquired) {\n      throw new Error('Conflict: Could not acquire lock for order processing.');\n    }\n\n    try {\n      // 2. Validate State Transition\n      const canTransition = await this.stateManager.canTransition(orderId, 'PENDING', 'PROCESSING');\n      if (!canTransition) {\n        throw new Error('Invalid state transition requested.');\n      }\n\n      // 3. Persist State\n      await this.stateManager.updateOrderState(orderId, 'PROCESSING');\n      this.logger.info({ msg: 'Order state updated to PROCESSING', orderId });\n\n      // 4. Publish Event\n      // Cast is safe as per domain structure alignment\n      await this.eventProducer.publishOrderPlaced(order as any);\n      this.logger.info({ msg: 'Order placed event published', orderId });\n\n      // 5. Finalize Transition\n      await this.stateManager.updateOrderState(orderId, 'PLACED');\n      this.logger.info({ msg: 'Order successfully placed', orderId });\n\n      return { success: true, orderId };\n    } finally {\n      // 6. Always Release Lock\n      await this.stateManager.releaseLock(lockKey);\n    }\n  }\n}\n",
+      "timestamp": "2026-04-03T23:09:49.181422Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "DA4F6061344677D1D6112A76C887E564DFF6C9A42A0A9A796FDB866F35309F3E",
+    "timestamp": 1775257789
+  }
+}

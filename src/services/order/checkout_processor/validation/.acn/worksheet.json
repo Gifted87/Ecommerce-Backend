@@ -1,0 +1,32 @@
+{
+  "checkout_validator_impl": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "6FEC059272BC3142189652E83BBB7D7E3526123363A674858A5168B0E057D830",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implemented the CheckoutValidator class to enforce data integrity for incoming order requests, including Zod schema validation and business logic constraints.",
+      "filename": "checkout_validator.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/order/checkout_processor/validation/checkout_validator.ts",
+      "id": "85452e43-46f3-40d4-a3a2-718f44205f8d",
+      "provenance_data": {
+        "behaviour": "The class validates order requests using Zod schemas for structure, followed by business logic integrity checks for capacity, SKU formats, quantity limits, and arithmetic consistency. It returns a frozen (immutable) validated object or throws a custom ValidationError. PII redaction is provided for secure logging.",
+        "interfaces": [
+          "validate(rawRequest: unknown, totalAmount: string): Promise<OrderRequest>",
+          "redactPII(data: any): any"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Enforces strict domain integrity for order requests, preventing invalid state transitions and financial discrepancies before processing."
+      },
+      "source_code": "import { z } from 'zod';\nimport Decimal from 'decimal.js';\nimport { \n  OrderRequestSchema, \n  OrderRequest\n} from '../domain/order_schemas';\n\n/**\n * Custom error class for validation failures.\n * Provides structured error reporting for downstream controllers.\n */\nexport class ValidationError extends Error {\n  constructor(public details: { path: string[]; message: string }[]) {\n    super('Validation failed');\n    this.name = 'ValidationError';\n  }\n}\n\n/**\n * CheckoutValidator handles the two-pass validation process for checkout requests.\n * Pass 1: Schema enforcement via Zod.\n * Pass 2: Business logic integrity (price calculations, SKU format, quantity limits).\n * \n * Stateless design ensures thread-safety and horizontal scalability.\n */\nexport class CheckoutValidator {\n  private static readonly SKU_REGEX = /^[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+$/;\n  private static readonly MAX_ITEMS_PER_ORDER = 50;\n  private static readonly MAX_QUANTITY_PER_ITEM = 99;\n\n  /**\n   * Performs high-fidelity validation of the checkout request.\n   * @param rawRequest Unknown object received from the controller.\n   * @param totalAmount The total amount claimed by the client for the order.\n   * @returns A validated OrderRequest object or throws a ValidationError.\n   */\n  public async validate(rawRequest: unknown, totalAmount: string): Promise<OrderRequest> {\n    // 1. Schema Validation\n    const parsed = OrderRequestSchema.safeParse(rawRequest);\n    if (!parsed.success) {\n      throw new ValidationError(\n        parsed.error.issues.map((issue) => ({\n          path: issue.path.map((p) => String(p)),\n          message: issue.message,\n        }))\n      );\n    }\n\n    const order = parsed.data;\n\n    // 2. Business Logic Validation\n    const errors: { path: string[]; message: string }[] = [];\n\n    // Capacity checks\n    if (order.items.length > CheckoutValidator.MAX_ITEMS_PER_ORDER) {\n      errors.push({ path: ['items'], message: `Order exceeds maximum item limit of ${CheckoutValidator.MAX_ITEMS_PER_ORDER}` });\n    }\n\n    let runningTotal = new Decimal(0);\n\n    for (let i = 0; i < order.items.length; i++) {\n      const item = order.items[i];\n      const itemPath = ['items', i.toString()];\n\n      // SKU Format Validation\n      if (!CheckoutValidator.SKU_REGEX.test(item.sku)) {\n        errors.push({ path: [...itemPath, 'sku'], message: 'Invalid SKU format' });\n      }\n\n      // Quantity Limits\n      if (item.quantity <= 0 || item.quantity > CheckoutValidator.MAX_QUANTITY_PER_ITEM) {\n        errors.push({ path: [...itemPath, 'quantity'], message: `Quantity must be between 1 and ${CheckoutValidator.MAX_QUANTITY_PER_ITEM}` });\n      }\n\n      // Unit Price * Quantity = Item Total Validation\n      const unitPrice = new Decimal(item.unit_price);\n      const quantity = new Decimal(item.quantity);\n      const itemTotal = new Decimal(item.item_total);\n\n      if (!unitPrice.mul(quantity).equals(itemTotal)) {\n        errors.push({ path: [...itemPath, 'item_total'], message: 'Calculation mismatch: unit_price * quantity != item_total' });\n      }\n\n      runningTotal = runningTotal.add(itemTotal);\n    }\n\n    // Global Order Total Validation\n    if (!runningTotal.equals(new Decimal(totalAmount))) {\n      errors.push({ path: ['total_amount'], message: 'Order total mismatch' });\n    }\n\n    if (errors.length > 0) {\n      throw new ValidationError(errors);\n    }\n\n    return Object.freeze(order);\n  }\n\n  /**\n   * Redacts sensitive data from objects for secure logging.\n   */\n  public redactPII(data: any): any {\n    if (!data || typeof data !== 'object') return data;\n    \n    const redacted = { ...data };\n    if (redacted.shipping_address) {\n      redacted.shipping_address = '[REDACTED]';\n    }\n    if (redacted.payment_token) {\n      redacted.payment_token = '[REDACTED]';\n    }\n    return redacted;\n  }\n}\n",
+      "timestamp": "2026-04-03T23:05:02.953905Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "CB68994A868519C39F9BD48C0F2AE9362B97AAD37F1200CAD30F57603A554AC6",
+    "timestamp": 1775257502
+  }
+}

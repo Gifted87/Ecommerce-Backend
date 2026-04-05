@@ -1,0 +1,33 @@
+{
+  "name": "@acn/traffic-resilience",
+  "version": "1.0.0",
+  "description": "Production-ready traffic and resilience middleware for high-concurrency ecommerce backend",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint 'src/**/*.ts'",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "http-errors": "2.0.0",
+    "ioredis": "5.4.1",
+    "opossum": "8.3.1",
+    "pino": "9.4.0",
+    "rate-limit-redis": "4.2.0",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@types/http-errors": "2.0.4",
+    "@types/node": "20.14.10",
+    "@typescript-eslint/eslint-plugin": "7.14.1",
+    "@typescript-eslint/parser": "7.14.1",
+    "eslint": "8.57.0",
+    "typescript": "5.5.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": "ACN Actuator",
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,32 @@
+{
+  "snapshot_engine": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "c4d054f76239478f7e914041e8c973a9e2258849b2c89f537023d6a62c64f7b2",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Inventory Snapshot Engine (ISE) implemented for Stage 1 reconciliation using PostgreSQL serializable transactions and Redis-based distributed locking.",
+      "filename": "InventorySnapshotEngine.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/services/reconciliation/core/logic/snapshot/InventorySnapshotEngine.ts",
+      "id": "3a121e6c-999b-4215-9a4d-034a00513164",
+      "provenance_data": {
+        "behaviour": "Captures point-in-time inventory snapshots using serializable transactions with row-level locking, ensuring eventual consistency in inventory reconciliation. Uses Redis for distributed locking to prevent concurrent reconciliation runs for the same SKU range. Includes robust retry logic for transient database failures.",
+        "interfaces": [
+          "captureSnapshot(startSku: string, endSku: string): Promise<InventorySnapshot[]>",
+          "getHealth(): { status: string; circuitState: string }"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a resilient, ACID-compliant mechanism for capturing inventory states during the reconciliation process, critical for inventory integrity."
+      },
+      "source_code": "import { Knex } from 'knex';\nimport { Logger } from 'pino';\nimport CircuitBreaker from 'opossum';\nimport Redis from 'ioredis';\nimport { InventorySnapshotSchema, InventorySnapshot } from '../schemas';\n\n/**\n * Custom error class for snapshot engine operations.\n */\nexport class InventorySnapshotEngineError extends Error {\n  constructor(public message: string, public code: string, public originalError?: any) {\n    super(message);\n    this.name = 'InventorySnapshotEngineError';\n  }\n}\n\n/**\n * The InventorySnapshotEngine (ISE) is the foundational component of the Stage 1 reconciliation process.\n * It provides an immutable, point-in-time view of inventory levels across the database catalog.\n */\nexport class InventorySnapshotEngine {\n  private readonly tableName = 'inventory';\n  private readonly breaker: CircuitBreaker;\n\n  constructor(\n    private readonly knex: Knex,\n    private readonly redis: Redis,\n    private readonly logger: Logger\n  ) {\n    this.logger = this.logger.child({ module: 'services/reconciliation/snapshot_engine' });\n\n    // Circuit breaker configuration for database and redis operations\n    this.breaker = new CircuitBreaker(async (fn: () => Promise<any>) => await fn(), {\n      timeout: 5000,\n      errorThresholdPercentage: 50,\n      resetTimeout: 30000,\n    });\n\n    this.breaker.on('open', () => this.logger.error('ISE: Circuit breaker opened.'));\n    this.breaker.on('close', () => this.logger.info('ISE: Circuit breaker closed.'));\n  }\n\n  /**\n   * Captures a snapshot of inventory records for a given SKU range.\n   * Ensures serializable transaction isolation and row-level locking.\n   */\n  public async captureSnapshot(startSku: string, endSku: string): Promise<InventorySnapshot[]> {\n    const lockKey = `reconciliation:lock:inventory:${startSku}:${endSku}`;\n    \n    // Acquire distributed lock to prevent overlapping runs\n    const lockAcquired = await this.redis.set(lockKey, 'locked', 'NX', 'EX', 3600);\n    if (!lockAcquired) {\n      throw new InventorySnapshotEngineError('Reconciliation already in progress for this range', 'LOCK_ACQUIRED_ERROR');\n    }\n\n    try {\n      return await this.breaker.fire(async () => {\n        return await this.executeWithRetry(async () => {\n          return await this.knex.transaction(async (trx) => {\n            // Set transaction isolation level\n            await trx.raw('SET TRANSACTION ISOLATION LEVEL SERIALIZABLE');\n\n            const rows = await trx(this.tableName)\n              .select('*')\n              .whereBetween('sku', [startSku, endSku])\n              .forUpdate();\n\n            const snapshots: InventorySnapshot[] = [];\n            for (const row of rows) {\n              const validated = InventorySnapshotSchema.parse(row);\n              snapshots.push(validated);\n            }\n\n            this.logger.info({ startSku, endSku, count: snapshots.length }, 'Snapshot captured successfully');\n            return snapshots;\n          });\n        });\n      });\n    } catch (error: any) {\n      this.logger.error({ error, startSku, endSku }, 'CRITICAL_INCONSISTENCY: Failed to capture snapshot');\n      throw new InventorySnapshotEngineError('Failed to capture snapshot after retries', 'SNAPSHOT_FAILED', error);\n    } finally {\n      await this.redis.del(lockKey);\n    }\n  }\n\n  /**\n   * Executes database operations with retry logic for deadlocks and serializable conflicts.\n   */\n  private async executeWithRetry<T>(work: () => Promise<T>, maxRetries = 3): Promise<T> {\n    let attempt = 0;\n    while (attempt < maxRetries) {\n      try {\n        return await work();\n      } catch (error: any) {\n        attempt++;\n        // Postgres error 40P01 (deadlock) or 40001 (serialization failure)\n        const isRetryable = error?.code === '40P01' || error?.code === '40001';\n        \n        if (isRetryable && attempt < maxRetries) {\n          const delay = Math.pow(2, attempt) * 100 + Math.random() * 50;\n          this.logger.warn({ attempt, error: error.code }, 'Retryable error detected, backing off');\n          await new Promise((resolve) => setTimeout(resolve, delay));\n          continue;\n        }\n        throw error;\n      }\n    }\n    throw new InventorySnapshotEngineError('Max retries exceeded', 'RETRY_LIMIT_EXCEEDED');\n  }\n\n  /**\n   * Returns current health status of the engine.\n   */\n  public getHealth(): { status: string; circuitState: string } {\n    return {\n      status: 'OK',\n      circuitState: this.breaker.opened ? 'OPEN' : 'CLOSED',\n    };\n  }\n}\n",
+      "timestamp": "2026-04-03T23:12:37.080866Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "45589F3F94867863C841357722AC3532614655B2AF5D312E197F3681AB755909",
+    "timestamp": 1775257957
+  }
+}

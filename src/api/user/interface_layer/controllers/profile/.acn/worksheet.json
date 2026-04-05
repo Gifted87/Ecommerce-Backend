@@ -1,0 +1,32 @@
+{
+  "profile_logic": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "24986227C3E36E9E5B505750895F7C7087BD55A6E73DE9F75443293E325121B4",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "ProfileController implementation for user profile management.",
+      "filename": "profile.controller.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/api/user/interface_layer/controllers/profile/profile.controller.ts",
+      "id": "364f9e7c-ac86-43da-8c4f-94d72ef3da36",
+      "provenance_data": {
+        "behaviour": "Implements user profile retrieval and update functionality with schema validation, PII redaction, ownership enforcement via JWT, and structured error logging.",
+        "interfaces": [
+          "getProfile(req: Request, res: Response, next: NextFunction): Promise<void>",
+          "updateProfile(req: Request, res: Response, next: NextFunction): Promise<void>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides secure, validated, and observable HTTP interface for managing user profiles, ensuring adherence to production-readiness standards."
+      },
+      "source_code": "import { Request, Response, NextFunction } from 'express';\nimport { Logger } from 'pino';\nimport { v4 as uuidv4 } from 'uuid';\nimport { UserUpdateSchema, toPublicUser } from '../../../domain/schemas/user.schema';\nimport { UserService } from '../../../domain/services/user.service';\n\n/**\n * @fileoverview ProfileController handles HTTP transport for user profile lifecycle.\n * Acts as an interface layer, delegating to UserService while enforcing security\n * and validation constraints.\n */\n\nexport class ProfileController {\n  constructor(\n    private readonly userService: UserService,\n    private readonly logger: Logger\n  ) {}\n\n  /**\n   * Retrieves the authenticated user's profile.\n   * Ensures sensitive fields are redacted before returning.\n   * \n   * @param req Express Request object\n   * @param res Express Response object\n   * @param next Express NextFunction\n   */\n  async getProfile(req: Request, res: Response, next: NextFunction): Promise<void> {\n    const correlationId = (req.headers['x-correlation-id'] as string) || uuidv4();\n    const userId = (req as any).user?.sub;\n\n    if (!userId) {\n      this.logger.warn({ correlationId }, 'Missing user ID in request context');\n      res.status(401).json({ error: 'UNAUTHORIZED' });\n      return;\n    }\n\n    try {\n      const user = await this.userService.findById(userId);\n\n      if (!user) {\n        this.logger.warn({ correlationId, userId }, 'User not found');\n        res.status(404).json({ error: 'USER_NOT_FOUND' });\n        return;\n      }\n\n      const publicProfile = toPublicUser(user);\n      res.status(200).json(publicProfile);\n    } catch (error) {\n      this.logger.error({ correlationId, error }, 'Failed to fetch user profile');\n      next(error);\n    }\n  }\n\n  /**\n   * Updates the authenticated user's profile.\n   * Validates input, performs ownership verification, and commits changes.\n   * \n   * @param req Express Request object\n   * @param res Express Response object\n   * @param next Express NextFunction\n   */\n  async updateProfile(req: Request, res: Response, next: NextFunction): Promise<void> {\n    const correlationId = (req.headers['x-correlation-id'] as string) || uuidv4();\n    const userId = (req as any).user?.sub;\n\n    if (!userId) {\n      this.logger.warn({ correlationId }, 'Missing user ID in request context');\n      res.status(401).json({ error: 'UNAUTHORIZED' });\n      return;\n    }\n\n    const validation = UserUpdateSchema.safeParse(req.body);\n\n    if (!validation.success) {\n      this.logger.warn({ correlationId, errors: validation.error.format() }, 'Profile update validation failed');\n      res.status(400).json({ error: 'VALIDATION_FAILED', details: validation.error.format() });\n      return;\n    }\n\n    try {\n      // In a production setup, ownership is inherently tied to the JWT 'sub' claim.\n      // We pass the verified user ID to the service to ensure atomicity and correct targeting.\n      const updatedUser = await this.userService.updateProfile(userId, validation.data);\n\n      if (!updatedUser) {\n        this.logger.error({ correlationId, userId }, 'Failed to update user - user not found');\n        res.status(404).json({ error: 'USER_NOT_FOUND' });\n        return;\n      }\n\n      const publicProfile = toPublicUser(updatedUser);\n      res.status(200).json(publicProfile);\n    } catch (error) {\n      this.logger.error({ correlationId, error }, 'Profile update operation failed');\n      next(error);\n    }\n  }\n}\n",
+      "timestamp": "2026-04-03T23:30:19.562817Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "FAE2AA96FA52C644801A590E653C56B6834BD451ADAEADA8AAE1116D552E34BA",
+    "timestamp": 1775259019
+  }
+}

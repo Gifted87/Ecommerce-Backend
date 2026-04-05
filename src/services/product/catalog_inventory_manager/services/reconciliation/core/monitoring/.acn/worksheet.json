@@ -1,0 +1,33 @@
+{
+  "observability_module": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "57f3547b744d99432657e2a9b40733a76384a3c11c52119c3547f4800d9842f1",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of the Health and Observability Module providing HTTP health probes and OpenTelemetry tracing for the reconciliation lifecycle.",
+      "filename": "index.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/services/reconciliation/core/monitoring/index.ts",
+      "id": "0df1760b-4bd4-49a2-943a-1a59c0ddbb03",
+      "provenance_data": {
+        "behaviour": "Provides health status monitoring for DB, Redis, and Kafka, and initializes OpenTelemetry tracing. Employs circuit breaking for health checks and supports graceful shutdown.",
+        "interfaces": [
+          "ProactiveHealthAuditor.checkReady(): Promise<HealthStatus>",
+          "ProactiveHealthAuditor.checkLive(): Promise<boolean>",
+          "DistributedObservabilityInstrumenter.start(): void"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides essential health monitoring for infrastructure dependencies and distributed tracing support via OpenTelemetry for the reconciliation service."
+      },
+      "source_code": "import { Pool } from 'pg';\nimport Redis from 'ioredis';\nimport { Kafka } from 'kafkajs';\nimport Opossum from 'opossum';\nimport { NodeSDK } from '@opentelemetry/sdk-node';\nimport { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';\nimport { Resource } from '@opentelemetry/resources';\nimport { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';\nimport { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';\nimport { z } from 'zod';\nimport logger from '../logging/logger';\n\n/**\n * @fileoverview Health and Observability Module\n * Implements Proactive Health Auditor (PHA) and Distributed Observability Instrumenter (DOI).\n */\n\n// --- Schemas & Types ---\n\nconst HealthSchema = z.object({\n  status: z.enum(['UP', 'DOWN', 'DEGRADED']),\n  components: z.record(z.object({\n    status: z.enum(['UP', 'DOWN']),\n    message: z.string().optional()\n  }))\n});\n\nexport type HealthStatus = z.infer<typeof HealthSchema>;\n\n// --- Proactive Health Auditor (PHA) ---\n\nexport class ProactiveHealthAuditor {\n  private readonly breaker: Opossum;\n\n  constructor(\n    private readonly db: Pool,\n    private readonly redis: Redis,\n    private readonly kafka: Kafka\n  ) {\n    const breakerOptions = {\n      timeout: 5000,\n      errorThresholdPercentage: 50,\n      resetTimeout: 30000\n    };\n\n    this.breaker = new Opossum(async () => {\n      return await this.performDeepCheck();\n    }, breakerOptions);\n  }\n\n  private async performDeepCheck(): Promise<HealthStatus> {\n    const components: Record<string, { status: 'UP' | 'DOWN'; message?: string }> = {};\n\n    // DB Check\n    try {\n      await this.db.query('SELECT 1');\n      components.postgres = { status: 'UP' };\n    } catch (e) {\n      components.postgres = { status: 'DOWN', message: (e as Error).message };\n    }\n\n    // Redis Check\n    try {\n      await this.redis.ping();\n      components.redis = { status: 'UP' };\n    } catch (e) {\n      components.redis = { status: 'DOWN', message: (e as Error).message };\n    }\n\n    // Kafka Check\n    try {\n      const admin = this.kafka.admin();\n      await admin.connect();\n      await admin.listTopics();\n      await admin.disconnect();\n      components.kafka = { status: 'UP' };\n    } catch (e) {\n      components.kafka = { status: 'DOWN', message: (e as Error).message };\n    }\n\n    const allUp = Object.values(components).every(c => c.status === 'UP');\n    const anyDown = Object.values(components).some(c => c.status === 'DOWN');\n\n    return {\n      status: allUp ? 'UP' : (anyDown ? 'DOWN' : 'DEGRADED'),\n      components\n    };\n  }\n\n  async checkReady(): Promise<HealthStatus> {\n    try {\n      return await this.breaker.fire();\n    } catch (e) {\n      logger.error({ module: 'health', error: e }, 'Health readiness check failed');\n      return { status: 'DOWN', components: {} };\n    }\n  }\n\n  async checkLive(): Promise<boolean> {\n    // Basic event loop lag check\n    const start = Date.now();\n    await new Promise(resolve => setImmediate(resolve));\n    const duration = Date.now() - start;\n    return duration < 100; // If event loop takes > 100ms, mark as unresponsive\n  }\n}\n\n// --- Distributed Observability Instrumenter (DOI) ---\n\nexport class DistributedObservabilityInstrumenter {\n  private sdk: NodeSDK;\n\n  constructor(serviceName: string, otlpEndpoint: string) {\n    this.sdk = new NodeSDK({\n      resource: new Resource({\n        [SemanticResourceAttributes.SERVICE_NAME]: serviceName,\n      }),\n      traceExporter: new OTLPTraceExporter({\n        url: otlpEndpoint,\n      }),\n      spanProcessor: new SimpleSpanProcessor(new OTLPTraceExporter({ url: otlpEndpoint })),\n    });\n  }\n\n  start(): void {\n    this.sdk.start();\n    process.on('SIGTERM', () => {\n      this.sdk.shutdown()\n        .then(() => logger.info({ module: 'observability' }, 'Tracing SDK shut down'))\n        .catch(err => logger.error({ module: 'observability', error: err }, 'Error shutting down tracing SDK'));\n    });\n  }\n}\n",
+      "timestamp": "2026-04-03T23:14:30.964103Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "17CEB155123F2B0E036735BE87028A76D044014BE5A30D928BF8A2B9F22AA1D4",
+    "timestamp": 1775258070
+  }
+}

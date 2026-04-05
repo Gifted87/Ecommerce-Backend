@@ -1,0 +1,33 @@
+{
+  "validation_interface_suite": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implemented the Validation Interface Suite for the Catalog and Inventory microservice using Zod. Provides strict structural and domain invariant validation for product and inventory operations.",
+      "filename": "validation.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/controllers/catalog_inventory_controller/validation/validation.ts",
+      "id": "f8e1ba1d-41a3-401a-a92b-5a167718848e",
+      "provenance_data": {
+        "behaviour": "Provides robust, schema-driven validation for product creation and inventory adjustments. Ensures data integrity and sanitization before domain processing. No external network I/O; utilizes standard Zod library.",
+        "interfaces": [
+          "validateProductCreation(data: unknown): ValidationResult<z.infer<typeof ProductCreationSchema>>",
+          "validateInventoryAdjustment(data: unknown): ValidationResult<z.infer<typeof InventoryAdjustmentSchema>>",
+          "redactSensitiveData(obj: Record<string, unknown>): Record<string, unknown>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides standardized, type-safe request validation and PII redaction utilities for the catalog and inventory controller layer."
+      },
+      "source_code": "import { z } from 'zod';\n\n/**\n * @fileoverview Validation interface suite for Catalog and Inventory microservice.\n * Provides strict structural and domain invariant validation for product and inventory operations.\n */\n\n/**\n * SKU format: [CATEGORY]-[PRODUCT_CODE]-[VARIANT_ID]\n * Example: ELEC-LAP-001\n * Strict regex ensures no invalid characters or malformed identifiers.\n */\nexport const SKU_REGEX = /^[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+$/;\n\n/**\n * Price format: Valid decimal string representation (e.g., \"19.99\")\n */\nexport const PRICE_REGEX = /^\\d+(\\.\\d{1,2})?$/;\n\n/**\n * Structured error format for API consistency.\n */\nexport interface ValidationErrorDetail {\n  path: string[];\n  message: string;\n  code: string;\n}\n\n/**\n * Standardized validation result type.\n */\nexport type ValidationResult<T> =\n  | { success: true; data: T }\n  | { success: false; errors: ValidationErrorDetail[] };\n\n/**\n * Product Creation Schema.\n * Enforces strict structural typing and basic domain constraints.\n */\nexport const ProductCreationSchema = z.object({\n  id: z.string().uuid('Invalid UUID format for product ID'),\n  sku: z.string().regex(SKU_REGEX, 'SKU must follow format [CATEGORY]-[PRODUCT_CODE]-[VARIANT_ID]'),\n  name: z.string().min(3, 'Product name must be at least 3 characters long'),\n  price: z.string().regex(PRICE_REGEX, 'Price must be a valid decimal string with up to 2 decimal places'),\n  metadata: z.record(z.unknown()).refine(\n    (obj) => Object.keys(obj).length <= 50,\n    { message: 'Metadata cannot exceed 50 top-level keys' }\n  ).optional(),\n});\n\n/**\n * Inventory Adjustment Schema.\n */\nexport const InventoryAdjustmentSchema = z.object({\n  product_id: z.string().uuid('Invalid UUID format for product ID'),\n  adjustment: z.number().int('Adjustment must be an integer'),\n  reason: z.string().min(3, 'Reason must be at least 3 characters long'),\n});\n\n/**\n * Validates product creation input.\n * \n * @param data - The raw request body to be validated.\n * @returns ValidationResult containing either the sanitized data or an array of error details.\n */\nexport const validateProductCreation = (data: unknown): ValidationResult<z.infer<typeof ProductCreationSchema>> => {\n  const result = ProductCreationSchema.safeParse(data);\n  if (!result.success) {\n    return {\n      success: false,\n      errors: result.error.issues.map((issue) => ({\n        path: issue.path.map((p) => String(p)),\n        message: issue.message,\n        code: issue.code,\n      })),\n    };\n  }\n  return { success: true, data: result.data };\n};\n\n/**\n * Validates inventory adjustment input.\n * \n * @param data - The raw request body to be validated.\n * @returns ValidationResult containing either the sanitized data or an array of error details.\n */\nexport const validateInventoryAdjustment = (data: unknown): ValidationResult<z.infer<typeof InventoryAdjustmentSchema>> => {\n  const result = InventoryAdjustmentSchema.safeParse(data);\n  if (!result.success) {\n    return {\n      success: false,\n      errors: result.error.issues.map((issue) => ({\n        path: issue.path.map((p) => String(p)),\n        message: issue.message,\n        code: issue.code,\n      })),\n    };\n  }\n  return { success: true, data: result.data };\n};\n\n/**\n * Redacts sensitive fields from objects before logging.\n * \n * @param obj - The object to redact.\n * @returns A new object with sensitive information replaced by [REDACTED].\n */\nexport const redactSensitiveData = (obj: Record<string, unknown>): Record<string, unknown> => {\n  const sensitiveKeys = ['auth_token', 'password', 'user_id', 'ssn', 'credit_card'];\n  const redacted = { ...obj };\n  \n  for (const key of sensitiveKeys) {\n    if (Object.prototype.hasOwnProperty.call(redacted, key)) {\n      redacted[key] = '[REDACTED]';\n    }\n  }\n  \n  return redacted;\n};\n",
+      "timestamp": "2026-04-03T23:19:32.960247Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "D2351341CAF5EA59E27E50336557F9FD0531C056C40A64C8DBED5F2B56CEE169",
+    "timestamp": 1775258372
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "interface_entry": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "3F803E9FB08357092C33E23B5CD89BBF115AB1996B459E114BE546A3A6B1E636",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implemented the primary module entry point for the user interface layer, orchestrating the exports of all domain-critical components.",
+      "filename": "index.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/api/user/interface_layer/index.ts",
+      "id": "86a4bd95-a0ed-4128-827c-ed227486046c",
+      "provenance_data": {
+        "behaviour": "Exposes a clean, encapsulated public API surface for the User Interface Layer, providing centralized access to domain models, services, controllers, and middleware, ensuring strict type safety and architectural consistency.",
+        "interfaces": [
+          "UserRegistrationSchema (Zod Object)",
+          "UserUpdateSchema (Zod Object)",
+          "UserModel (Interface)",
+          "PublicUser (Type)",
+          "toPublicUser (Function)",
+          "validateRegistration (Function)",
+          "AuthService (Class)",
+          "MfaService (Class)",
+          "AuthController (Class)",
+          "MfaController (Class)",
+          "AuthMiddleware (Class)"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Centralizes module access and enforces architectural encapsulation, preventing leaking of internal implementation details while facilitating ease of consumption by other services in the ACN lattice."
+      },
+      "source_code": "/**\n * @fileoverview Public API surface for the User Interface Layer.\n * This module serves as the central facade for the user management domain,\n * orchestrating the export of controllers, services, middleware, and schemas\n * to ensure a type-safe, secure, and high-performance API boundary.\n */\n\n// Export Domain Schemas and Types\nexport { \n  UserRegistrationSchema, \n  UserUpdateSchema, \n  UserModel, \n  PublicUser, \n  toPublicUser, \n  validateRegistration \n} from './domain';\n\n// Export Domain Services\n/**\n * AuthService provides core authentication logic including login, registration, \n * and token management. It is designed for non-blocking I/O operations.\n */\nexport { AuthService } from './services/auth_service';\n\n/**\n * MfaService handles Multi-Factor Authentication workflows including secret \n * generation, verification, and backup code management.\n */\nexport { MfaService } from './services/mfa_service';\n\n// Export Controllers\n/**\n * AuthController manages request orchestration for authentication-related endpoints,\n * integrating with AuthService and providing structured JSON responses.\n */\nexport { AuthController } from './controllers/auth_controller';\n\n/**\n * MfaController orchestrates MFA lifecycle requests, ensuring all interactions\n * are secured by appropriate authentication middleware.\n */\nexport { MfaController } from './controllers/mfa_controller';\n\n// Export Infrastructure and Middleware\n/**\n * AuthMiddleware is the primary security gatekeeper. It must be applied to \n * all protected routes to enforce session/JWT validation, rate limiting, \n * and correlation ID tracking.\n */\nexport { AuthMiddleware } from './middleware/auth_middleware';\n\n/**\n * Provides a central hook for initialization, such as setting up \n * distributed tracing, logger instances, or dependency injection \n * container configuration.\n */\nexport * from './init';\n",
+      "timestamp": "2026-04-03T23:31:58.540726Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "7EEFBD120C387333E90039A65D3D051E65C4204CD9B272F2A51B2F7207723C74",
+    "timestamp": 1775259118
+  }
+}

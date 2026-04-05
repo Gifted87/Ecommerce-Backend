@@ -1,0 +1,33 @@
+{
+  "order_repository_impl": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "8e3b1c6d4a5f9e2b1c0d3a4f5e6b7c8d9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "OrderRepository implemented with Knex for PostgreSQL, featuring transactional state management, circuit breaking via Opossum, and structured Pino logging with PII redaction.",
+      "filename": "OrderRepository.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/order/checkout_processor/repository/OrderRepository.ts",
+      "id": "242d7e07-87d4-43e2-a599-70365431007a",
+      "provenance_data": {
+        "behaviour": "Provides an ACID-compliant repository for persistent order management using Knex, with integrated circuit breaking, structured logging, and PII redaction. Ensures transactional integrity for state mutations.",
+        "interfaces": [
+          "create(orderData: Omit<OrderModel, 'created_at' | 'updated_at'>): Promise<OrderModel>",
+          "updateStatus(orderId: string, status: OrderStatus): Promise<OrderModel>",
+          "findById(orderId: string): Promise<OrderModel | null>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides robust, ACID-compliant database access for the Order Service, ensuring data integrity and observability."
+      },
+      "source_code": "import { Knex } from 'knex';\nimport { Logger } from 'pino';\nimport CircuitBreaker from 'opossum';\nimport { OrderModel, OrderModelSchema, OrderStatus } from '../types/orderTypes';\n\n/**\n * Custom Error for Repository-level domain exceptions.\n */\nexport class OrderRepositoryError extends Error {\n  constructor(public message: string, public code: string, public originalError?: any) {\n    super(message);\n    this.name = 'OrderRepositoryError';\n  }\n}\n\n/**\n * Interface for redaction to prevent PII logging.\n */\ninterface RedactableOrder {\n  order_id: string;\n  user_id: string;\n  status: OrderStatus;\n  total_amount: string;\n}\n\n/**\n * Implementation of the OrderRepository.\n * Handles persistent storage for the Checkout State Machine.\n */\nexport class OrderRepository {\n  private readonly tableName = 'orders';\n  private readonly breaker: CircuitBreaker;\n\n  constructor(\n    private readonly db: Knex,\n    private readonly logger: Logger\n  ) {\n    this.breaker = new CircuitBreaker(async (fn: () => Promise<any>) => await fn(), {\n      timeout: 5000,\n      errorThresholdPercentage: 50,\n      resetTimeout: 30000,\n    });\n  }\n\n  /**\n   * Redacts sensitive information from the order model before logging.\n   */\n  private redact(order: OrderModel): RedactableOrder {\n    return {\n      order_id: order.order_id,\n      user_id: order.user_id,\n      status: order.status,\n      total_amount: order.total_amount,\n    };\n  }\n\n  /**\n   * Persists a new order within a transaction.\n   */\n  public async create(orderData: Omit<OrderModel, 'created_at' | 'updated_at'>): Promise<OrderModel> {\n    return await this.breaker.fire(async () => {\n      const start = performance.now();\n      try {\n        const validated = OrderModelSchema.parse(orderData);\n        \n        return await this.db.transaction(async (trx) => {\n          const [result] = await trx(this.tableName)\n            .insert({\n              ...validated,\n              items: JSON.stringify(validated.items),\n              shipping_address: JSON.stringify(validated.shipping_address),\n              created_at: new Date(),\n              updated_at: new Date(),\n            })\n            .returning('*');\n\n          this.logger.info(\n            { operation: 'CREATE_ORDER', duration: performance.now() - start, ...this.redact(result) },\n            'Order created successfully'\n          );\n          \n          return result;\n        });\n      } catch (error: any) {\n        this.logger.error({ operation: 'CREATE_ORDER', error: error.message }, 'Failed to create order');\n        throw new OrderRepositoryError('Persistence failed', 'DB_CREATE_ERROR', error);\n      }\n    });\n  }\n\n  /**\n   * Updates an existing order status within a transaction.\n   */\n  public async updateStatus(orderId: string, status: OrderStatus): Promise<OrderModel> {\n    return await this.breaker.fire(async () => {\n      const start = performance.now();\n      try {\n        return await this.db.transaction(async (trx) => {\n          const [result] = await trx(this.tableName)\n            .where({ order_id: orderId })\n            .update({ status, updated_at: new Date() })\n            .returning('*');\n\n          if (!result) {\n            throw new OrderRepositoryError('Order not found', 'NOT_FOUND');\n          }\n\n          this.logger.info(\n            { operation: 'UPDATE_ORDER_STATUS', duration: performance.now() - start, ...this.redact(result) },\n            'Order status updated'\n          );\n\n          return result;\n        });\n      } catch (error: any) {\n        this.logger.error({ operation: 'UPDATE_ORDER_STATUS', orderId, error: error.message }, 'Failed to update order status');\n        throw new OrderRepositoryError('Update failed', 'DB_UPDATE_ERROR', error);\n      }\n    });\n  }\n\n  /**\n   * Retrieves an order by ID.\n   */\n  public async findById(orderId: string): Promise<OrderModel | null> {\n    return await this.breaker.fire(async () => {\n      const start = performance.now();\n      try {\n        const result = await this.db(this.tableName).where({ order_id: orderId }).first();\n        \n        if (!result) return null;\n\n        const parsed = OrderModelSchema.parse({\n          ...result,\n          items: typeof result.items === 'string' ? JSON.parse(result.items) : result.items,\n          shipping_address: typeof result.shipping_address === 'string' ? JSON.parse(result.shipping_address) : result.shipping_address,\n        });\n\n        this.logger.debug(\n          { operation: 'FIND_ORDER', duration: performance.now() - start, ...this.redact(parsed) },\n          'Order retrieved'\n        );\n\n        return parsed;\n      } catch (error: any) {\n        this.logger.error({ operation: 'FIND_ORDER', orderId, error: error.message }, 'Query failed');\n        throw new OrderRepositoryError('Query execution failed', 'DB_FIND_ERROR', error);\n      }\n    });\n  }\n}\n",
+      "timestamp": "2026-04-03T23:07:04.204529Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "80CDC123C16D4404296A510098AF32700AE999C1590ECAF74901D4359B559757",
+    "timestamp": 1775257624
+  }
+}

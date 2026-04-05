@@ -1,0 +1,32 @@
+{
+  "shared_contracts_module": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "77c44e057f5979f8b46d7e0031804f8664168058782415132333065609462214",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Defined TypeScript contracts and Zod schemas for Users, Products, Orders, Payments, and Kafka events.",
+      "filename": "contracts.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/shared/contracts/contracts.ts",
+      "id": "31a4cd7c-4791-4b3d-9639-d973127d5ad6",
+      "provenance_data": {
+        "behaviour": "Defines strongly typed Zod schemas and TypeScript interfaces for the entire ecommerce domain, ensuring consistent data structures across microservices.",
+        "interfaces": [
+          "UserContract",
+          "ProductContract, OrderContract, PaymentContract, OrderEvent, InventoryEvent"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides the source of truth for data shapes across all microservices, enabling strict type safety and schema validation."
+      },
+      "source_code": "import { z } from 'zod';\n\n/**\n * Core System Enums\n */\nexport enum OrderState {\n  PENDING = 'PENDING',\n  AUTHORIZED = 'AUTHORIZED',\n  CAPTURED = 'CAPTURED',\n  REFUNDED = 'REFUNDED',\n  SHIPPED = 'SHIPPED',\n  CANCELLED = 'CANCELLED',\n}\n\nexport enum UserRole {\n  CUSTOMER = 'CUSTOMER',\n  ADMIN = 'ADMIN',\n  SUPPORT = 'SUPPORT',\n}\n\n/**\n * User Contract\n */\nexport const UserSchema = z.object({\n  id: z.string().uuid(),\n  email: z.string().email(),\n  passwordHash: z.string(), // Argon2id hash\n  salt: z.string(),\n  role: z.nativeEnum(UserRole),\n  mfaEnabled: z.boolean(),\n  createdAt: z.date(),\n  updatedAt: z.date(),\n});\n\nexport type UserContract = z.infer<typeof UserSchema>;\n\n/**\n * Product Contract\n */\nexport const ProductSchema = z.object({\n  sku: z.string(),\n  name: z.string(),\n  price: z.string().regex(/^\\d+(\\.\\d{1,2})?$/), // Decimal stored as string for precision\n  stockQuantity: z.number().int().nonnegative(),\n  attributes: z.record(z.string(), z.any()), // JSONB dynamic attributes\n  version: z.number().int(), // Optimistic locking\n});\n\nexport type ProductContract = z.infer<typeof ProductSchema>;\n\n/**\n * Order Contract\n */\nexport const ProductSnapshotSchema = z.object({\n  sku: z.string(),\n  priceAtPurchase: z.string(),\n  quantity: z.number().int().positive(),\n});\n\nexport const OrderSchema = z.object({\n  id: z.string().uuid(),\n  userId: z.string().uuid(),\n  items: z.array(ProductSnapshotSchema),\n  totalAmount: z.string(),\n  currency: z.string().length(3),\n  state: z.nativeEnum(OrderState),\n  correlationId: z.string().uuid(),\n  createdAt: z.date(),\n  updatedAt: z.date(),\n});\n\nexport type OrderContract = z.infer<typeof OrderSchema>;\n\n/**\n * Payment Contract\n */\nexport const PaymentSchema = z.object({\n  id: z.string().uuid(),\n  orderId: z.string().uuid(),\n  status: z.nativeEnum(OrderState).refine(\n    (s) => [OrderState.PENDING, OrderState.AUTHORIZED, OrderState.CAPTURED, OrderState.REFUNDED].includes(s)\n  ),\n  amount: z.string(),\n  token: z.string(), // Encrypted payment token\n  correlationId: z.string().uuid(),\n});\n\nexport type PaymentContract = z.infer<typeof PaymentSchema>;\n\n/**\n * Kafka Event Schemas\n */\nexport const OrderEventSchema = z.object({\n  correlationId: z.string().uuid(),\n  timestamp: z.date(),\n  type: z.enum(['ORDER_CREATED', 'PAYMENT_RECEIVED', 'ORDER_SHIPPED', 'ORDER_CANCELLED']),\n  payload: z.object({\n    orderId: z.string().uuid(),\n    userId: z.string().uuid(),\n  }),\n});\n\nexport type OrderEvent = z.infer<typeof OrderEventSchema>;\n\nexport const InventoryEventSchema = z.object({\n  correlationId: z.string().uuid(),\n  timestamp: z.date(),\n  type: z.enum(['INVENTORY_DECREMENTED', 'INVENTORY_INCREMENTED']),\n  payload: z.object({\n    sku: z.string(),\n    quantity: z.number().int(),\n  }),\n});\n\nexport type InventoryEvent = z.infer<typeof InventoryEventSchema>;",
+      "timestamp": "2026-04-03T21:51:56.444410Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "C1B67CF06DBF0C1906399776F975350DC05A66F479F44DD61983F80501FD7147",
+    "timestamp": 1775253116
+  }
+}

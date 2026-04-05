@@ -1,0 +1,31 @@
+{
+  "validation_middleware": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "8a4628292850949d01217e65126830743b123847517173820293740237463721",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implemented a secure, high-performance schema-based input validation middleware for Express using Zod and Pino for structured logging.",
+      "filename": "validation.middleware.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/api/user/interface_layer/middleware/validation/validation.middleware.ts",
+      "id": "93f8f06a-2de1-4200-bcac-507dcc4d2ab4",
+      "provenance_data": {
+        "behaviour": "Intercepts HTTP requests, validates the body against a provided Zod schema, logs validation results (with PII redaction), injects validated data into the request object, and returns standardized 400 or 500 error responses. Uses correlation IDs for distributed tracing.",
+        "interfaces": [
+          "validateInput<T extends z.ZodTypeAny>(schema: T): RequestHandler"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Ensures that all incoming API requests strictly adhere to domain-defined schemas before reaching the business logic layer, preventing malformed data injection and enhancing security."
+      },
+      "source_code": "import { Request, Response, NextFunction, RequestHandler } from 'express';\nimport { z } from 'zod';\nimport pino from 'pino';\nimport { v4 as uuidv4 } from 'uuid';\n\n/**\n * @fileoverview Schema-based input validation middleware.\n * Provides a high-performance, secure gatekeeper for user-related endpoints\n * using Zod for strict type enforcement and structured observability.\n */\n\n// Production-ready logger configuration with PII redaction\nconst logger = pino({\n  level: process.env.LOG_LEVEL || 'info',\n  redact: {\n    paths: ['email', 'password', 'token', 'secret', 'authorization', 'cookie'],\n    censor: '[REDACTED]',\n  },\n  base: {\n    service: 'user-lifecycle-middleware',\n  },\n});\n\n/**\n * Higher-order function that generates an Express middleware for Zod schema validation.\n * Ensures atomicity, security, and traceability for incoming HTTP requests.\n * \n * @param schema The Zod schema to validate req.body against.\n * @returns An Express RequestHandler.\n */\nexport const validateInput = <T extends z.ZodTypeAny>(schema: T): RequestHandler => {\n  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {\n    // 1. Establish Traceability\n    const correlationId = (req.headers['x-correlation-id'] as string) || uuidv4();\n    req.headers['x-correlation-id'] = correlationId;\n    res.setHeader('x-correlation-id', correlationId);\n\n    const logContext = {\n      correlationId,\n      path: req.path,\n      method: req.method,\n    };\n\n    try {\n      // 2. Perform Schema Validation\n      // Use safeParseAsync to handle potentially complex async refinements\n      const result = await schema.safeParseAsync(req.body);\n\n      if (!result.success) {\n        // Log the failure for security auditing (PII redacted)\n        logger.warn({ ...logContext, error: 'Validation failed' }, 'Input validation error occurred');\n\n        // 3. Opaque Error Response\n        // Mitigates enumeration attacks by returning a uniform error\n        res.status(400).json({\n          status: 400,\n          message: 'Invalid request parameters',\n          correlationId,\n        });\n        return;\n      }\n\n      // 4. Inject validated data back into the request object\n      // This pattern avoids re-parsing downstream\n      req.body = result.data;\n\n      next();\n    } catch (error) {\n      // 5. Fatal Error Handling\n      // Catches unforeseen issues (e.g., circular payloads, unexpected runtime exceptions)\n      logger.error({ ...logContext, err: error }, 'Unexpected validation middleware exception');\n\n      res.status(500).json({\n        status: 500,\n        message: 'Internal server error during request processing',\n        correlationId,\n      });\n    }\n  };\n};\n",
+      "timestamp": "2026-04-03T23:29:26.081197Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "D00F7F82AEDC4F2793B3C439BA6E13E857E0087433B4537B7DE71652F7888CF4",
+    "timestamp": 1775258966
+  }
+}

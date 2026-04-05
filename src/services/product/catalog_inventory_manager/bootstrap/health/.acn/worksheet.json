@@ -1,0 +1,32 @@
+{
+  "health_engine": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "B16E8E67A717C32ACF4A0A8174584895CCF4A2F474DE4595DE730E6468CAD70F",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "A production-ready health monitoring module providing centralized connectivity status and liveness probes for the infrastructure layer.",
+      "filename": "health_monitor.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/bootstrap/health/health_monitor.ts",
+      "id": "21f032aa-4c84-416e-a273-3d4abee15c63",
+      "provenance_data": {
+        "behaviour": "Initializes a HealthMonitorService that orchestrates health probes for PostgreSQL, Redis, and Kafka using Opossum circuit breakers. It provides real-time infrastructure status and monitors process responsiveness via event loop lag tracking.",
+        "interfaces": [
+          "checkReady(): Promise<HealthStatus>",
+          "checkLive(): Promise<boolean>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Centralized health monitoring ensuring operational reliability through infrastructure connectivity auditing and system responsiveness checks."
+      },
+      "source_code": "import { Pool } from 'pg';\nimport Redis from 'ioredis';\nimport { Kafka, Admin } from 'kafkajs';\nimport Opossum from 'opossum';\nimport { z } from 'zod';\nimport pino from 'pino';\n\n/**\n * @fileoverview Central Health Monitoring Module\n * Implements Proactive Health Auditor (PHA) for infrastructure dependency monitoring.\n */\n\nconst logger = pino({ name: 'HealthMonitor' });\n\nexport const HealthStatusSchema = z.object({\n  status: z.enum(['UP', 'DOWN', 'DEGRADED']),\n  components: z.record(z.object({\n    status: z.enum(['UP', 'DOWN']),\n    message: z.string().optional()\n  })),\n  timestamp: z.string()\n});\n\nexport type HealthStatus = z.infer<typeof HealthStatusSchema>;\n\nexport interface IHealthProbe {\n  check(): Promise<void>;\n  getName(): string;\n}\n\nclass PostgresProbe implements IHealthProbe {\n  constructor(private db: Pool) {}\n  getName() { return 'postgres'; }\n  async check(): Promise<void> {\n    await this.db.query('SELECT 1');\n  }\n}\n\nclass RedisProbe implements IHealthProbe {\n  constructor(private redis: Redis) {}\n  getName() { return 'redis'; }\n  async check(): Promise<void> {\n    await this.redis.ping();\n  }\n}\n\nclass KafkaProbe implements IHealthProbe {\n  constructor(private kafka: Kafka) {}\n  getName() { return 'kafka'; }\n  async check(): Promise<void> {\n    const admin: Admin = this.kafka.admin();\n    try {\n      await admin.connect();\n      await admin.listTopics();\n    } finally {\n      await admin.disconnect();\n    }\n  }\n}\n\nexport class HealthMonitorService {\n  private readonly breakers: Map<string, Opossum> = new Map();\n  private readonly probes: IHealthProbe[] = [];\n  private eventLoopLag: number = 0;\n\n  constructor(\n    private readonly db: Pool,\n    private readonly redis: Redis,\n    private readonly kafka: Kafka\n  ) {\n    this.probes.push(new PostgresProbe(this.db));\n    this.probes.push(new RedisProbe(this.redis));\n    this.probes.push(new KafkaProbe(this.kafka));\n\n    const breakerOptions = {\n      timeout: 3000,\n      errorThresholdPercentage: 50,\n      resetTimeout: 30000\n    };\n\n    for (const probe of this.probes) {\n      const breaker = new Opossum(async () => await probe.check(), breakerOptions);\n      breaker.on('open', () => logger.error({ component: probe.getName() }, 'Circuit breaker opened'));\n      breaker.on('close', () => logger.info({ component: probe.getName() }, 'Circuit breaker closed'));\n      this.breakers.set(probe.getName(), breaker);\n    }\n\n    this.startEventLoopMonitor();\n  }\n\n  private startEventLoopMonitor(): void {\n    let lastTime = Date.now();\n    const interval = setInterval(() => {\n      const now = Date.now();\n      const delta = now - lastTime;\n      this.eventLoopLag = Math.max(0, delta - 1000);\n      lastTime = now;\n    }, 1000);\n    interval.unref();\n  }\n\n  public async checkReady(): Promise<HealthStatus> {\n    const componentResults = await Promise.allSettled(\n      this.probes.map(async (probe) => {\n        const breaker = this.breakers.get(probe.getName());\n        if (!breaker) throw new Error(`Breaker not found for ${probe.getName()}`);\n        await breaker.fire();\n        return { name: probe.getName(), status: 'UP' as const };\n      })\n    );\n\n    const components: Record<string, { status: 'UP' | 'DOWN', message?: string }> = {};\n\n    componentResults.forEach((result, index) => {\n      const name = this.probes[index].getName();\n      if (result.status === 'fulfilled') {\n        components[name] = { status: 'UP' };\n      } else {\n        components[name] = { status: 'DOWN', message: result.reason.message };\n        logger.error({ component: name, error: result.reason }, 'Health check failed');\n      }\n    });\n\n    const isAllUp = Object.values(components).every(c => c.status === 'UP');\n    const isAnyDown = Object.values(components).some(c => c.status === 'DOWN');\n\n    return {\n      status: isAllUp ? 'UP' : (isAnyDown ? 'DOWN' : 'DEGRADED'),\n      components,\n      timestamp: new Date().toISOString()\n    };\n  }\n\n  public async checkLive(): Promise<boolean> {\n    // If event loop lag is > 200ms, service is effectively deadlocked/unresponsive\n    return this.eventLoopLag < 200;\n  }\n}\n",
+      "timestamp": "2026-04-03T23:21:30.694808Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "0DFA87D87CA979CCB93A6CB6C0D675EC007A4A753BF06DA66989E26AA71A2506",
+    "timestamp": 1775258490
+  }
+}

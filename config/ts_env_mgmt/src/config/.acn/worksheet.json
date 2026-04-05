@@ -1,0 +1,32 @@
+{
+  "env_export": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "2196d4982c7d9e504c5e3475949d28795c739572c6946002f236f06a1420b925",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "A production-ready environment configuration loader that parses, validates, and freezes application settings using zod and dotenv.",
+      "filename": "index.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/config/ts_env_mgmt/src/config/index.ts",
+      "id": "2f66a832-fc84-430a-ae59-3e814e504f68",
+      "provenance_data": {
+        "behaviour": "Initializes environment variables on startup, validates them against a rigid Zod schema, terminates the process on failure, and exports an immutable, type-safe configuration object.",
+        "interfaces": [
+          "config: AppConfig (readonly)",
+          "type AppConfig (z.infer<typeof envSchema>)"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a centralized, type-safe, and immutable configuration object for the entire application, ensuring fail-fast behavior on invalid environment variables."
+      },
+      "source_code": "import { z } from 'zod';\nimport dotenv from 'dotenv';\n\n/**\n * @fileoverview Central configuration management for the high-concurrency ecommerce backend.\n * Provides a strictly validated, immutable, and type-safe configuration object.\n * Loads variables from the environment and ensures system integrity at boot time.\n * \n * This module follows the Singleton pattern, ensuring that the application environment\n * is validated exactly once upon initialization.\n */\n\n// Initialize dotenv to load .env files if present.\ndotenv.config();\n\n/**\n * Zod schema defining the strict environment configuration requirements.\n * This schema acts as the single source of truth for the environment contract.\n */\nconst envSchema = z.object({\n  // Application Metadata\n  APP_ENV: z.enum(['development', 'staging', 'production']).default('production'),\n  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),\n  PORT: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(1).max(65535)),\n\n  // Database Configuration\n  DB_HOST: z.string().min(1),\n  DB_PORT: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(1).max(65535)),\n  DB_USER: z.string().min(1),\n  DB_PASSWORD: z.string().min(1),\n  DB_NAME: z.string().min(1),\n  DB_POOL_MIN: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(0)),\n  DB_POOL_MAX: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(1)),\n\n  // Redis Configuration\n  REDIS_URL: z.string().url(),\n  REDIS_TTL_DEFAULT: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(0)),\n  REDIS_TIMEOUT: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(0)),\n\n  // Kafka Configuration\n  KAFKA_BROKER_URL: z.string().transform((val) => val.split(',')),\n  KAFKA_CLIENT_ID: z.string().min(1),\n  KAFKA_GROUP_ID: z.string().min(1),\n  KAFKA_PRODUCER_TIMEOUT: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(0)),\n\n  // Security Configuration\n  JWT_SECRET: z.string().min(64, 'JWT_SECRET must be at least 64 characters long'),\n  JWT_EXPIRATION: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(60)),\n  ARGON2_SALT_ROUNDS: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(10).max(20)),\n});\n\n/**\n * Parses and validates process.env against the defined schema.\n * If validation fails, it constructs a structured JSON response and terminates the process.\n * \n * @returns {AppConfig} The validated environment configuration.\n */\nconst parseEnv = (): AppConfig => {\n  const result = envSchema.safeParse(process.env);\n\n  if (!result.success) {\n    const errorDetails = result.error.issues.map((issue) => ({\n      path: issue.path.join('.'),\n      message: issue.message,\n    }));\n\n    // Use stderr for critical boot-time failures to ensure logging in observability tools.\n    process.stderr.write(\n      JSON.stringify({\n        level: 'critical',\n        message: 'Environment validation failed: System cannot boot with invalid configuration.',\n        errors: errorDetails,\n        timestamp: new Date().toISOString(),\n      }) + '\\n'\n    );\n\n    // Fail-fast strategy: terminate the process to prevent zombie states.\n    process.exit(1);\n  }\n\n  return result.data;\n};\n\n// Validate and freeze the configuration to ensure runtime immutability.\nconst validatedEnv = Object.freeze(parseEnv());\n\n/**\n * The validated, immutable configuration object.\n * Acts as the singular source of truth for the entire application.\n */\nexport const config = validatedEnv;\n\n/**\n * Type-safe interface for the application configuration.\n */\nexport type AppConfig = z.infer<typeof envSchema>;\n",
+      "timestamp": "2026-04-03T22:59:19.977136Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "21F97EC1BF8B34321D67BB056098FE1A523210B45D88EFDCDFD33E6E071EC2EA",
+    "timestamp": 1775257159
+  }
+}

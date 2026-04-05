@@ -1,0 +1,33 @@
+{
+  "bootstrap_manifest": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "133161c5658e379058b765476100570b556f8f5334861b559779929841444155",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Production-ready package.json manifest for the catalog and inventory management service.",
+      "filename": "package.json",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/bootstrap/package.json",
+      "id": "00456c40-581b-4d05-9ed2-b385381b1ada",
+      "provenance_data": {
+        "behaviour": "Defines production-ready dependency environment for catalog and inventory management service, enabling stable execution of all required infrastructure integrations.",
+        "interfaces": [
+          "npm start",
+          "npm run build",
+          "npm run migrate"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides the environment configuration and dependency graph required to bootstrap the service securely and performantly within the ACN production ecosystem."
+      },
+      "source_code": "{\n  \"name\": \"@acn/catalog-inventory-manager\",\n  \"version\": \"1.0.0\",\n  \"description\": \"Production-ready Product Catalog and Inventory Management Service\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"engines\": {\n    \"node\": \">=20.0.0\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/index.js\",\n    \"lint\": \"eslint 'src/**/*.ts'\",\n    \"test\": \"jest\",\n    \"migrate\": \"knex migrate:latest\",\n    \"type-check\": \"tsc --noEmit\"\n  },\n  \"author\": \"ACN Actuator\",\n  \"license\": \"UNLICENSED\",\n  \"dependencies\": {\n    \"dotenv\": \"16.4.5\",\n    \"ioredis\": \"5.4.1\",\n    \"kafkajs\": \"2.2.4\",\n    \"knex\": \"3.1.0\",\n    \"opossum\": \"8.3.1\",\n    \"pg\": \"8.12.0\",\n    \"pino\": \"9.3.2\",\n    \"pino-pretty\": \"11.2.2\",\n    \"zod\": \"3.23.8\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"29.5.12\",\n    \"@types/node\": \"20.14.10\",\n    \"@typescript-eslint/eslint-plugin\": \"7.14.1\",\n    \"@typescript-eslint/parser\": \"7.14.1\",\n    \"eslint\": \"8.57.0\",\n    \"jest\": \"29.7.0\",\n    \"ts-jest\": \"29.1.5\",\n    \"typescript\": \"5.5.3\"\n  }\n}",
+      "timestamp": "2026-04-03T23:18:52.955283Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "8EA40E8A5F9FD788B518A96B98C12A38B3F24D525CFD545B9747205400C51DC7",
+    "timestamp": 1775258332
+  }
+}

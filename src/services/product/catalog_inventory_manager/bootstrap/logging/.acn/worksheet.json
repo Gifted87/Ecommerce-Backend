@@ -1,0 +1,32 @@
+{
+  "logging_engine": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "2e85e4544715f5d8487b40d6c70222a7f539e08354c4244f77c3a0784a3297a7",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "A centralized, production-ready logging module implemented with Pino, featuring automatic PII redaction and structured, asynchronous JSON output.",
+      "filename": "index.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/bootstrap/logging/index.ts",
+      "id": "78a8cf83-02b6-470b-8398-e74c37ff6ae3",
+      "provenance_data": {
+        "behaviour": "Initializes a structured JSON logging service using Pino, configured for PII redaction and hierarchical context, ready for integration into the catalog and inventory management system.",
+        "interfaces": [
+          "export interface LogContext { module: string; requestId?: string; userId?: string; sku?: string; batchProcessId?: string; [key: string]: any; }",
+          "export const createLogger: (context: LogContext) => Logger"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a consistent, secure, and production-hardened logging interface for the entire catalog and inventory backend services."
+      },
+      "source_code": "import pino, { Logger, LoggerOptions } from 'pino';\nimport os from 'os';\n\n/**\n * @fileoverview Centralized, high-performance, and secure logging service \n * for the product catalog and inventory management system.\n * \n * Implements structured JSON logging, automatic PII redaction, \n * and hierarchical context injection for distributed tracing.\n */\n\n/**\n * Sensitive fields that must be redacted from all log outputs.\n */\nconst REDACTED_KEYS = [\n  'password',\n  'credit_card',\n  'authorization',\n  'token',\n  'cookie',\n  'set-cookie',\n  'secret',\n  'access_token',\n  'refresh_token',\n  'cvv'\n];\n\n/**\n * Pino configuration for production-ready, non-blocking, asynchronous JSON logging.\n */\nconst loggerOptions: LoggerOptions = {\n  level: process.env.LOG_LEVEL || 'info',\n  redact: {\n    paths: REDACTED_KEYS,\n    censor: '[REDACTED]'\n  },\n  formatters: {\n    level: (label: string) => ({ level: label }),\n  },\n  timestamp: pino.stdTimeFunctions.isoTime,\n  base: {\n    pid: process.pid,\n    hostname: os.hostname(),\n    service: 'catalog-inventory-manager'\n  },\n  errorKey: 'error',\n  serializers: {\n    error: pino.stdSerializers.err,\n  },\n};\n\n/**\n * Root logger instance, providing the base configuration for the service.\n */\nconst rootLogger: Logger = pino(loggerOptions);\n\n/**\n * Defines the required structure for log metadata.\n * Every log entry must include a 'module' to allow for granular filtering.\n */\nexport interface LogContext {\n  module: string;\n  requestId?: string;\n  userId?: string;\n  sku?: string;\n  batchProcessId?: string;\n  [key: string]: any;\n}\n\n/**\n * Creates a child logger with injected hierarchical context.\n * \n * Used for injecting tracing IDs, user identifiers, and module names \n * into logs for easier aggregation and debugging.\n * \n * @param context - The metadata object containing 'module' and additional context.\n * @returns A pino logger instance enriched with the provided context.\n * @throws Error if the module property is missing.\n */\nexport const createLogger = (context: LogContext): Logger => {\n  if (!context || typeof context.module !== 'string') {\n    // Graceful recovery: log warning if context is invalid rather than crashing the service\n    const warningLogger = rootLogger.child({ module: 'logger-system' });\n    warningLogger.warn('Invalid logger context provided; missing or non-string \"module\" property.');\n    return rootLogger.child({ module: 'unknown' });\n  }\n  return rootLogger.child(context);\n};\n\n/**\n * Default logger instance for global usage.\n * Should be used as a fallback if no specific module context is available.\n */\nconst logger: Logger = rootLogger.child({ module: 'global' });\n\nexport default logger;\n",
+      "timestamp": "2026-04-03T23:18:47.922205Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "19C1F7CD803D08B1E467BBBFFC39E851D9E8BC0991204A610B49002638BA127D",
+    "timestamp": 1775258327
+  }
+}

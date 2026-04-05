@@ -1,0 +1,33 @@
+{
+  "diagnostics_interface_module": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "9d08e50b9868770c67e889b4f2c0c7a507851d451249767222370725a396263b",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "HealthMonitorService implemented with circuit-breaker protected connectivity checks for PG, Redis, and Kafka, alongside Prometheus-based metrics instrumentation.",
+      "filename": "diagnostics.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/controllers/catalog_inventory_controller/diagnostics/diagnostics.ts",
+      "id": "e23590c5-8649-482a-bbeb-6161742c56b5",
+      "provenance_data": {
+        "behaviour": "Provides real-time infrastructure health status and metrics observability via registered endpoints. Automatically tracks event loop lag and exposes Prometheus metrics.",
+        "interfaces": [
+          "HealthMonitorService.checkReady(): Promise<HealthStatus>",
+          "HealthMonitorService.checkLive(): Promise<boolean>",
+          "metricsRegistry: Registry"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides standardized health and observability instrumentation for the Catalog/Inventory services, ensuring production reliability and visibility."
+      },
+      "source_code": "import { Pool } from 'pg';\nimport Redis from 'ioredis';\nimport { Kafka, Admin } from 'kafkajs';\nimport Opossum from 'opossum';\nimport { Registry, Gauge, Counter, Histogram } from 'prom-client';\nimport { z } from 'zod';\nimport pino from 'pino';\n\n/**\n * @fileoverview Health and Metrics Diagnostics Module\n * Implements health probes (liveness, readiness) and metrics instrumentation.\n */\n\nconst logger = pino({ name: 'DiagnosticsModule' });\n\n// --- Schemas & Types ---\n\nexport const HealthStatusSchema = z.object({\n  status: z.enum(['UP', 'DOWN', 'DEGRADED']),\n  components: z.record(z.object({\n    status: z.enum(['UP', 'DOWN']),\n    message: z.string().optional()\n  }))\n});\n\nexport type HealthStatus = z.infer<typeof HealthStatusSchema>;\n\n// --- Metrics Configuration ---\n\nexport const metricsRegistry = new Registry();\n\nexport const requestCounter = new Counter({\n  name: 'http_requests_total',\n  help: 'Total number of HTTP requests',\n  labelNames: ['method', 'route', 'status_code'],\n  registers: [metricsRegistry]\n});\n\nexport const requestDuration = new Histogram({\n  name: 'http_request_duration_seconds',\n  help: 'Duration of HTTP requests in seconds',\n  labelNames: ['route'],\n  registers: [metricsRegistry]\n});\n\nexport const eventLoopLag = new Gauge({\n  name: 'nodejs_eventloop_lag_seconds',\n  help: 'Event loop lag in seconds',\n  registers: [metricsRegistry]\n});\n\n// --- Diagnostics Service ---\n\nexport class HealthMonitorService {\n  private readonly breakers: Record<string, Opossum>;\n\n  constructor(\n    private readonly db: Pool,\n    private readonly redis: Redis,\n    private readonly kafka: Kafka\n  ) {\n    const breakerOptions = {\n      timeout: 2000,\n      errorThresholdPercentage: 50,\n      resetTimeout: 30000\n    };\n\n    this.breakers = {\n      postgres: new Opossum(async () => await this.checkPostgres(), breakerOptions),\n      redis: new Opossum(async () => await this.checkRedis(), breakerOptions),\n      kafka: new Opossum(async () => await this.checkKafka(), breakerOptions)\n    };\n\n    this.startEventLoopMonitor();\n  }\n\n  private async checkPostgres(): Promise<void> {\n    await this.db.query('SELECT 1');\n  }\n\n  private async checkRedis(): Promise<void> {\n    await this.redis.ping();\n  }\n\n  private async checkKafka(): Promise<void> {\n    const admin: Admin = this.kafka.admin();\n    try {\n      await admin.connect();\n      await admin.listTopics();\n    } finally {\n      await admin.disconnect();\n    }\n  }\n\n  private startEventLoopMonitor(): void {\n    let lastTime = Date.now();\n    setInterval(() => {\n      const now = Date.now();\n      const lag = Math.max(0, now - lastTime - 1000) / 1000;\n      eventLoopLag.set(lag);\n      lastTime = now;\n    }, 1000).unref();\n  }\n\n  /**\n   * Executes deep health check of all infrastructure components.\n   * @returns {Promise<HealthStatus>}\n   */\n  public async checkReady(): Promise<HealthStatus> {\n    const results = await Promise.allSettled([\n      this.breakers.postgres.fire(),\n      this.breakers.redis.fire(),\n      this.breakers.kafka.fire()\n    ]);\n\n    const components: Record<string, { status: 'UP' | 'DOWN', message?: string }> = {\n      postgres: results[0].status === 'fulfilled' ? { status: 'UP' } : { status: 'DOWN', message: (results[0] as PromiseRejectedResult).reason.message },\n      redis: results[1].status === 'fulfilled' ? { status: 'UP' } : { status: 'DOWN', message: (results[1] as PromiseRejectedResult).reason.message },\n      kafka: results[2].status === 'fulfilled' ? { status: 'UP' } : { status: 'DOWN', message: (results[2] as PromiseRejectedResult).reason.message }\n    };\n\n    const isAllUp = Object.values(components).every(c => c.status === 'UP');\n    const isAnyDown = Object.values(components).some(c => c.status === 'DOWN');\n\n    const status: HealthStatus['status'] = isAllUp ? 'UP' : (isAnyDown ? 'DOWN' : 'DEGRADED');\n\n    return { status, components };\n  }\n\n  /**\n   * Performs a lightweight check of the process responsiveness.\n   */\n  public async checkLive(): Promise<boolean> {\n    return new Promise((resolve) => {\n      const start = Date.now();\n      setImmediate(() => {\n        const duration = Date.now() - start;\n        resolve(duration < 200);\n      });\n    });\n  }\n}\n",
+      "timestamp": "2026-04-03T23:20:42.516204Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "E3E6055D8A09E6990D51C37F8615E7443DD13166783683BF77F8DFAA7782A217",
+    "timestamp": 1775258442
+  }
+}

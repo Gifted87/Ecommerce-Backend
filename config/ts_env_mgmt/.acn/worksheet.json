@@ -1,0 +1,29 @@
+{
+  "env_template": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "136D8A1796C80C1EB67558444214CCA3CC5AA87D896F85DF6320E7B4EC1D9581",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of .env.example configuration template for production deployment.",
+      "filename": ".env.example",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/config/ts_env_mgmt/.env.example",
+      "id": "a8e46842-d49d-4281-9654-6c71d3033371",
+      "provenance_data": {
+        "behaviour": "Creates a production-ready environment variable template (.env.example) that serves as the blueprint for required infrastructure configurations, ensuring consistency across distributed instances.",
+        "interfaces": [],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a documentation template for production environment variables, preventing misconfiguration during node deployment."
+      },
+      "source_code": "# ==============================================================================\n# E-COMMERCE BACKEND CONFIGURATION TEMPLATE\n# ==============================================================================\n# This file serves as the singular source of truth for runtime environment\n# configuration. Copy this file to '.env' and populate with production values.\n# All fields are mandatory for system initialization.\n# ==============================================================================\n\n# ------------------------------------------------------------------------------\n# APPLICATION METADATA\n# ------------------------------------------------------------------------------\n# APP_ENV: The runtime environment (e.g., development, staging, production)\nAPP_ENV=production\n# LOG_LEVEL: The severity threshold for system logging (e.g., debug, info, warn, error)\nLOG_LEVEL=info\n# PORT: The TCP port the application service will bind to\nPORT=3000\n\n# ------------------------------------------------------------------------------\n# POSTGRESQL DATABASE CONFIGURATION\n# ------------------------------------------------------------------------------\n# DB_HOST: The hostname or IP address of the PostgreSQL primary instance\nDB_HOST=REQUIRED_DB_HOST\n# DB_PORT: The port number of the PostgreSQL instance\nDB_PORT=5432\n# DB_USER: The authenticated database user\nDB_USER=REQUIRED_DB_USER\n# DB_PASSWORD: The secure password for the database user\nDB_PASSWORD=REQUIRED_DB_PASSWORD\n# DB_NAME: The database instance name\nDB_NAME=REQUIRED_DB_NAME\n# DB_POOL_MIN: Minimum number of connections in the connection pool (keep low to save resources)\nDB_POOL_MIN=2\n# DB_POOL_MAX: Maximum number of connections to handle peak concurrency\nDB_POOL_MAX=20\n\n# ------------------------------------------------------------------------------\n# CACHING AND SESSION LAYER (REDIS)\n# ------------------------------------------------------------------------------\n# REDIS_URL: Connection URI for the Redis instance (e.g., redis://user:password@host:port/db)\nREDIS_URL=redis://localhost:6379/0\n# REDIS_TTL_DEFAULT: Default Time-To-Live for cached items in seconds\nREDIS_TTL_DEFAULT=3600\n# REDIS_TIMEOUT: Connection timeout in milliseconds for operations\nREDIS_TIMEOUT=5000\n\n# ------------------------------------------------------------------------------\n# MESSAGE BROKER (KAFKA)\n# ------------------------------------------------------------------------------\n# KAFKA_BROKER_URL: Comma-separated list of bootstrap brokers (e.g., host1:9092,host2:9092)\nKAFKA_BROKER_URL=REQUIRED_KAFKA_BROKERS\n# KAFKA_CLIENT_ID: Unique identifier for this application client\nKAFKA_CLIENT_ID=ecommerce-backend-service\n# KAFKA_GROUP_ID: Consumer group identifier for load balancing events\nKAFKA_GROUP_ID=ecommerce-consumer-group\n# KAFKA_PRODUCER_TIMEOUT: Timeout in milliseconds for message acknowledgment\nKAFKA_PRODUCER_TIMEOUT=3000\n\n# ------------------------------------------------------------------------------\n# SECURITY AND IDENTITY MANAGEMENT\n# ------------------------------------------------------------------------------\n# JWT_SECRET: Strong, random secret for signing authentication tokens (min 64 chars)\nJWT_SECRET=REQUIRED_SECURE_JWT_SECRET_STRING\n# JWT_EXPIRATION: Token expiration time in seconds (e.g., 3600 for 1 hour)\nJWT_EXPIRATION=3600\n# ARGON2_SALT_ROUNDS: Number of iterations for password hashing (security vs performance)\nARGON2_SALT_ROUNDS=12\n",
+      "timestamp": "2026-04-03T22:57:49.654844Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "455F13C61C3DBB0B87AA34B8D15C751F37B6EA1AE629065D184E094945A3E589",
+    "timestamp": 1775257069
+  }
+}

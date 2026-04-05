@@ -1,0 +1,33 @@
+{
+  "domain_product_schema": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "e0b1a0e1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of Product and Inventory domain data schemas and SKU-based validation logic.",
+      "filename": "product_inventory_schemas.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/domain/product/schemas/product_inventory_schemas.ts",
+      "id": "b1d4c7ca-21a6-4fe1-b762-7561ae07bff5",
+      "provenance_data": {
+        "behaviour": "Defines schema validation and domain-specific state mutation logic for Product and Inventory. Implements non-negative stock enforcement and atomic state transition validation.",
+        "interfaces": [
+          "validateProduct(data: unknown): SafeParseReturnType<unknown, Product>",
+          "validateInventory(data: unknown): SafeParseReturnType<unknown, Inventory>",
+          "validateInventoryMutation(current: Inventory, totalChange: number, reservedChange: number): { success: boolean, data?: Inventory, error?: string }"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides critical domain validation logic for product catalog and inventory stock management, ensuring data integrity at the domain layer."
+      },
+      "source_code": "import { z } from 'zod';\n\n/**\n * @fileoverview Product and Inventory domain schemas with strict validation logic.\n * Enforces SKU format [CATEGORY]-[PRODUCT_CODE]-[VARIANT_ID] and maintains\n * domain invariants for inventory state.\n */\n\n// SKU format: [CATEGORY]-[PRODUCT_CODE]-[VARIANT_ID]\n// Example: ELEC-LAP-001\nconst skuRegex = /^[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+$/;\n\n/**\n * Product Schema\n * Defines the core attributes for catalog entities.\n */\nexport const ProductSchema = z.object({\n  id: z.string().uuid(),\n  sku: z.string().regex(skuRegex, 'SKU must follow format [CATEGORY]-[PRODUCT_CODE]-[VARIANT_ID]'),\n  name: z.string().min(3, 'Product name must be at least 3 characters long'),\n  price: z.string().regex(/^\\d+(\\.\\d{1,2})?$/, 'Price must be a valid decimal string'),\n  metadata: z.record(z.unknown()).optional(),\n  created_at: z.date().default(() => new Date()),\n  updated_at: z.date().default(() => new Date()),\n});\n\nexport type Product = z.infer<typeof ProductSchema>;\n\n/**\n * Inventory Schema\n * Manages dynamic stock state and enforces consistency constraints.\n */\nexport const InventorySchema = z\n  .object({\n    product_id: z.string().uuid(),\n    total_stock: z.number().int().nonnegative(),\n    reserved_stock: z.number().int().nonnegative(),\n  })\n  .refine(\n    (data) => data.total_stock >= data.reserved_stock,\n    {\n      message: 'Total stock must be greater than or equal to reserved stock',\n      path: ['total_stock'],\n    }\n  )\n  .transform((data) => ({\n    ...data,\n    available_stock: data.total_stock - data.reserved_stock,\n  }));\n\nexport type Inventory = z.infer<typeof InventorySchema>;\n\n/**\n * Validates product data input.\n */\nexport const validateProduct = (data: unknown) => {\n  return ProductSchema.safeParse(data);\n};\n\n/**\n * Validates inventory data input.\n */\nexport const validateInventory = (data: unknown) => {\n  return InventorySchema.safeParse(data);\n};\n\n/**\n * Domain-specific integrity check for stock transitions.\n * Ensures the resulting inventory state is valid.\n */\nexport const validateInventoryMutation = (\n  current: Inventory,\n  totalChange: number,\n  reservedChange: number\n): { success: boolean; data?: Inventory; error?: string } => {\n  const nextTotal = current.total_stock + totalChange;\n  const nextReserved = current.reserved_stock + reservedChange;\n\n  if (nextTotal < 0 || nextReserved < 0) {\n    return { success: false, error: 'Negative stock levels are not permitted' };\n  }\n\n  if (nextTotal < nextReserved) {\n    return { success: false, error: 'Cannot reserve more stock than total available' };\n  }\n\n  return {\n    success: true,\n    data: {\n      product_id: current.product_id,\n      total_stock: nextTotal,\n      reserved_stock: nextReserved,\n      available_stock: nextTotal - nextReserved,\n    },\n  };\n};\n",
+      "timestamp": "2026-04-03T23:01:00.754817Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "5677F54BD98A4B514F4E7DD4C15AB9BC3A22A1CBCED4F2137F54313461002054",
+    "timestamp": 1775257260
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "order_interface_error_mapper": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "c34d3d8a7c2a5c1e2f5b6a7d8c9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implements a global Express error middleware to standardize API error responses and enforce production-grade observability and security.",
+      "filename": "index.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/api/order/interfaces/errors/index.ts",
+      "id": "263f2de2-252b-47d4-a969-40b00efbb408",
+      "provenance_data": {
+        "behaviour": "Exports a global error handling middleware for the Order API that sanitizes responses, performs structured logging, and maps domain-specific errors to standard HTTP status codes.",
+        "interfaces": [
+          "handleDomainError(err: any, req: Request, res: Response, _next: NextFunction): void",
+          "DomainError class extending Error"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a centralized, production-ready middleware to handle, log, and sanitize application errors for the Order API interface layer."
+      },
+      "source_code": "import { Request, Response, NextFunction } from 'express';\nimport { v4 as uuidv4 } from 'uuid';\nimport pino from 'pino';\nimport createError, { HttpError } from 'http-errors';\n\n/**\n * Base class for all domain-specific errors.\n */\nexport class DomainError extends Error {\n  constructor(\n    public readonly statusCode: number,\n    public readonly appCode: string,\n    public readonly message: string,\n    public readonly details: any = null\n  ) {\n    super(message);\n    Object.setPrototypeOf(this, new.target.prototype);\n    Error.captureStackTrace(this, this.constructor);\n  }\n}\n\n/**\n * Logger configuration for the error handler.\n */\nconst logger = pino({\n  level: process.env.LOG_LEVEL || 'info',\n  redact: {\n    paths: ['password', 'credit_card', 'authorization', 'token', 'cookie', 'set-cookie', 'secret', 'email'],\n    censor: '[REDACTED]'\n  },\n  base: { service: 'order-api-interface' },\n});\n\n/**\n * Maps common domain error types and codes to HTTP status codes.\n */\nconst mapToHttpStatus = (error: any): number => {\n  if (error instanceof DomainError) {\n    return error.statusCode;\n  }\n  \n  if (error.code === 'EOPENBREAKER' || error.name === 'CircuitBreakerError') {\n    return 503;\n  }\n\n  // Handle common external library errors\n  if (error.name === 'ValidationError' || error.name === 'ZodError') {\n    return 400;\n  }\n\n  return 500;\n};\n\n/**\n * Standardized error response interface.\n */\ninterface ApiErrorResponse {\n  status: 'error';\n  error: {\n    code: string;\n    message: string;\n    details?: any;\n  };\n  meta: {\n    requestId: string;\n    timestamp: string;\n  };\n}\n\n/**\n * Global Error Handler for the Order API.\n * Ensures consistent error formatting, observability, and security shielding.\n */\nexport const handleDomainError = (\n  err: any,\n  req: Request,\n  res: Response,\n  _next: NextFunction\n): void => {\n  const requestId = (req.headers['x-correlation-id'] as string) || uuidv4();\n  const statusCode = mapToHttpStatus(err);\n  \n  // Security Masking: For 500 errors, hide internal details from client\n  const isInternal = statusCode >= 500;\n  \n  const errorPayload: ApiErrorResponse = {\n    status: 'error',\n    error: {\n      code: isInternal ? 'INTERNAL_SERVER_ERROR' : (err.appCode || 'OPERATION_FAILED'),\n      message: isInternal ? 'An unexpected error occurred.' : (err.message || 'An error occurred.'),\n      details: isInternal ? null : (err instanceof DomainError ? err.details : null),\n    },\n    meta: {\n      requestId,\n      timestamp: new Date().toISOString(),\n    },\n  };\n\n  // Structured Logging\n  const logMetadata = {\n    requestId,\n    statusCode,\n    path: req.path,\n    method: req.method,\n    stack: process.env.NODE_ENV !== 'production' ? err.stack : undefined,\n    body: req.body,\n  };\n\n  if (isInternal) {\n    logger.error({ err, ...logMetadata }, 'Internal Server Error encountered');\n  } else {\n    logger.warn({ err, ...logMetadata }, 'Operational error occurred');\n  }\n\n  res.setHeader('x-correlation-id', requestId);\n  res.status(statusCode).json(errorPayload);\n};\n",
+      "timestamp": "2026-04-03T23:30:45.093790Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "56DE6EA51369B2CC98B24B0E5AA7AAE8057A23C553D2DBFF6336FE3E4C71E841",
+    "timestamp": 1775259045
+  }
+}

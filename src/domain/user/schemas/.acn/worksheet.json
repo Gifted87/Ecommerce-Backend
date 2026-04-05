@@ -1,0 +1,33 @@
+{
+  "domain_user_schema": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "d7249c585149340f1a63c6d7b4c80775d7149a4f4d2b3806f1406d4e5f76b054",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implemented User domain Zod schemas, TypeScript interfaces, and transformation functions for authentication and profile management.",
+      "filename": "user.schema.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/domain/user/schemas/user.schema.ts",
+      "id": "c2ae5658-20f6-473e-a52a-d7a5e84efe72",
+      "provenance_data": {
+        "behaviour": "Defines schema validation and data models for User domain. Uses Zod for runtime validation, ensuring type safety and strict input sanitization. Provides conversion logic to strip sensitive fields from internal models.",
+        "interfaces": [
+          "validateRegistration(data: unknown) -> SafeParseReturnType",
+          "validateUpdate(data: unknown) -> SafeParseReturnType",
+          "toPublicUser(user: UserModel) -> PublicUser"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides essential type safety, data validation, and PII-redaction mechanisms for the User domain, ensuring high-quality, production-ready data handling."
+      },
+      "source_code": "import { z } from 'zod';\n\n/**\n * @fileoverview User domain data schemas and validation logic for high-concurrency authentication and profile management.\n * Provides strictly enforced Zod schemas for user lifecycle management to ensure data integrity,\n * security compliance, and type safety across the distributed microservices architecture.\n */\n\n/**\n * Password complexity requirements:\n * - Minimum 12 characters: Ensures resistance against brute-force and dictionary attacks.\n * - At least one uppercase letter: Increases entropy.\n * - At least one lowercase letter: Increases entropy.\n * - At least one digit: Required for compliance with modern security standards.\n * - At least one special character: Ensures resilience against common password cracking patterns.\n */\nconst passwordSchema = z\n  .string()\n  .min(12, 'Password must be at least 12 characters long')\n  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')\n  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')\n  .regex(/[0-9]/, 'Password must contain at least one digit')\n  .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');\n\n/**\n * Zod schema for user registration inputs.\n * Strictly enforces structure and format for incoming sign-up requests.\n * Uses .toLowerCase() on email to ensure uniqueness and normalization in database lookups.\n */\nexport const UserRegistrationSchema = z.object({\n  email: z.string().email('Invalid email format').trim().toLowerCase(),\n  password: passwordSchema,\n  username: z.string().min(3, 'Username must be at least 3 characters long').max(50, 'Username cannot exceed 50 characters').trim(),\n  first_name: z.string().min(1, 'First name is required').max(100, 'First name too long').trim(),\n  last_name: z.string().min(1, 'Last name is required').max(100, 'Last name too long').trim(),\n});\n\n/**\n * Zod schema for profile updates.\n * Implements partial update capability for mutable fields.\n * Excludes sensitive or immutable internal fields like user_id, password_hash, and created_at.\n */\nexport const UserUpdateSchema = z.object({\n  username: z.string().min(3, 'Username must be at least 3 characters long').max(50).trim().optional(),\n  first_name: z.string().min(1, 'First name is required').max(100).trim().optional(),\n  last_name: z.string().min(1, 'Last name is required').max(100).trim().optional(),\n  email: z.string().email('Invalid email format').trim().toLowerCase().optional(),\n});\n\n/**\n * Internal database user model.\n * Represents the source of truth for the User entity within the application.\n */\nexport interface UserModel {\n  user_id: string; // UUID v4\n  email: string;\n  username: string;\n  password_hash: string;\n  salt: string;\n  first_name: string;\n  last_name: string;\n  mfa_secret: string | null;\n  is_verified: boolean;\n  created_at: Date;\n  updated_at: Date;\n}\n\n/**\n * Publicly exposed user profile.\n * Strips sensitive fields (password_hash, salt, mfa_secret) from the database model\n * to safely expose profile data to the API consumers.\n */\nexport type PublicUser = Omit<UserModel, 'password_hash' | 'salt' | 'mfa_secret'>;\n\n/**\n * Transforms the internal database model into a public-facing user profile.\n * Purges sensitive credentials to prevent unauthorized exposure.\n * \n * @param user The full internal user database model.\n * @returns {PublicUser} The safe public representation of the user.\n */\nexport function toPublicUser(user: UserModel): PublicUser {\n  const { password_hash, salt, mfa_secret, ...publicUser } = user;\n  return publicUser;\n}\n\n/**\n * Validates registration data against the UserRegistrationSchema.\n * Optimized for high-throughput environments using safeParse to avoid exception overhead.\n * \n * @param data The raw input data from the request.\n * @returns The validation result containing success or error details.\n */\nexport const validateRegistration = (data: unknown) => {\n  return UserRegistrationSchema.safeParse(data);\n};\n\n/**\n * Validates update data against the UserUpdateSchema.\n * \n * @param data The raw input data from the request.\n * @returns The validation result containing success or error details.\n */\nexport const validateUpdate = (data: unknown) => {\n  return UserUpdateSchema.safeParse(data);\n};\n\n/**\n * Type definitions for validated inputs.\n */\nexport type UserRegistration = z.infer<typeof UserRegistrationSchema>;\nexport type UserUpdate = z.infer<typeof UserUpdateSchema>;\n",
+      "timestamp": "2026-04-03T23:00:56.931984Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "540582C37E7E0D26AFB5F78AFFBB43D09614EC7A77D0BA0B2FE1350236357329",
+    "timestamp": 1775257256
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "mfa_transport_controller": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "c946e30a5c13b3554e7d4a04d168e376046e75b7501a40306c4b2609930f3056",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implemented MfaController to orchestrate MFA setup, verification, and deactivation.",
+      "filename": "mfa.controller.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/user/auth_mfa_module/controllers/mfa.controller.ts",
+      "id": "e6cb0fd0-cd86-4b22-a5b9-4b2e469e8396",
+      "provenance_data": {
+        "behaviour": "Implements HTTP transport for MFA lifecycle, delegating to MfaService for business logic. Uses Zod for input validation and Pino for structured logging. Handles errors centrally.",
+        "interfaces": [
+          "healthCheck(req: Request, res: Response): Promise<void>",
+          "setup(req: Request, res: Response, next: NextFunction): Promise<void>",
+          "verify(req: Request, res: Response, next: NextFunction): Promise<void>",
+          "disable(req: Request, res: Response, next: NextFunction): Promise<void>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides the HTTP interface for the MFA domain, ensuring separation of concerns between transport and business logic."
+      },
+      "source_code": "import { Request, Response, NextFunction } from 'express';\nimport { z } from 'zod';\nimport { Logger } from 'pino';\nimport { MfaService } from '../services/mfa.service';\n\n/**\n * Validation schema for Verify MFA request.\n */\nconst VerifyMfaSchema = z.object({\n  token: z.string().length(6, 'OTP must be exactly 6 digits'),\n});\n\n/**\n * MfaController handles HTTP transport for MFA lifecycle (setup, verification, disabling).\n * It acts as an orchestrator, delegating domain logic to MfaService.\n */\nexport class MfaController {\n  constructor(\n    private readonly mfaService: MfaService,\n    private readonly logger: Logger\n  ) {}\n\n  /**\n   * Health check endpoint to verify MFA Service connectivity.\n   */\n  async healthCheck(req: Request, res: Response): Promise<void> {\n    try {\n      res.status(200).json({ status: 'UP', service: 'MfaController' });\n    } catch (error) {\n      this.logger.error({ error }, 'MfaController health check failed');\n      res.status(500).json({ error: 'INTERNAL_SERVER_ERROR' });\n    }\n  }\n\n  /**\n   * Handles MFA setup: initiates TOTP secret generation.\n   */\n  async setup(req: Request, res: Response, next: NextFunction): Promise<void> {\n    const userId = (req as any).user?.id;\n    const email = (req as any).user?.email;\n\n    if (!userId || !email) {\n      res.status(401).json({ error: 'UNAUTHORIZED' });\n      return;\n    }\n\n    try {\n      const mfaSecret = await this.mfaService.generateSecret(userId);\n      const qrCode = await this.mfaService.createQrCode(mfaSecret.mfa_secret, email);\n\n      res.status(200).json({\n        mfa_id: mfaSecret.mfa_id,\n        secret: mfaSecret.mfa_secret,\n        qr_code: qrCode,\n      });\n    } catch (error) {\n      this.logger.error({ userId, error }, 'Failed to setup MFA');\n      next(error);\n    }\n  }\n\n  /**\n   * Handles MFA verification: validates OTP token.\n   */\n  async verify(req: Request, res: Response, next: NextFunction): Promise<void> {\n    const userId = (req as any).user?.id;\n    const validation = VerifyMfaSchema.safeParse(req.body);\n\n    if (!userId) {\n      res.status(401).json({ error: 'UNAUTHORIZED' });\n      return;\n    }\n\n    if (!validation.success) {\n      res.status(400).json({ error: validation.error.format() });\n      return;\n    }\n\n    try {\n      const { token } = validation.data;\n      const isValid = await this.mfaService.verifyToken(userId, token);\n\n      if (isValid) {\n        res.status(200).json({ status: 'VERIFIED' });\n      } else {\n        res.status(401).json({ error: 'INVALID_TOKEN' });\n      }\n    } catch (error) {\n      this.logger.error({ userId, error }, 'MFA verification error');\n      next(error);\n    }\n  }\n\n  /**\n   * Handles MFA deactivation.\n   */\n  async disable(req: Request, res: Response, next: NextFunction): Promise<void> {\n    const userId = (req as any).user?.id;\n\n    if (!userId) {\n      res.status(401).json({ error: 'UNAUTHORIZED' });\n      return;\n    }\n\n    try {\n      await this.mfaService.disableMfa(userId);\n      res.status(204).send();\n    } catch (error) {\n      this.logger.error({ userId, error }, 'Failed to disable MFA');\n      next(error);\n    }\n  }\n}\n",
+      "timestamp": "2026-04-03T23:09:36.466758Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "2DD517EAADB6107AFD3FED56A72E1DAA457F48612DC8461DC2EC313025F2D81E",
+    "timestamp": 1775257776
+  }
+}

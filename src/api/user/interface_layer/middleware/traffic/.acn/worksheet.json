@@ -1,0 +1,33 @@
+{
+  "traffic_middleware": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "8f71c4c8d5a1b32d16a8d6f51950e1837f6a27e7d6928e469c84e1b5f6a9e1d8",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of a production-ready, Redis-backed distributed rate limiting and DDoS protection middleware using ioredis, opossum, and rate-limiter-flexible.",
+      "filename": "distributed_rate_limiter.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/api/user/interface_layer/middleware/traffic/distributed_rate_limiter.ts",
+      "id": "af74423c-e561-4f7d-bc45-e0fc0dbb44b7",
+      "provenance_data": {
+        "behaviour": "Provides asynchronous, circuit-breaking rate limiting middleware for HTTP requests. Integrates with Redis for global state tracking, supports differentiated limits for authenticated vs. unauthenticated traffic, and handles circuit breaker failures by failing open. Propagates x-correlation-id for observability.",
+        "interfaces": [
+          "DistributedRateLimiter.getInstance(redis: Redis): DistributedRateLimiter",
+          "DistributedRateLimiter.middleware(overrideConfig?: RateLimitConfig): (req: Request, res: Response, next: NextFunction) => Promise<void>",
+          "DistributedRateLimiter.getHealth(): Promise<{ status: 'ready' | 'degraded' | 'down' }>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides global, resilient, distributed traffic shaping for the ecommerce backend to ensure high availability during traffic spikes."
+      },
+      "source_code": "import { Request, Response, NextFunction } from 'express';\nimport Redis from 'ioredis';\nimport { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';\nimport Opossum from 'opossum';\nimport pino from 'pino';\nimport { v4 as uuidv4 } from 'uuid';\nimport { z } from 'zod';\n\nconst logger = pino({\n  level: process.env.LOG_LEVEL || 'info',\n  formatters: {\n    level: (label) => ({ level: label }),\n  },\n});\n\nconst RateLimitConfigSchema = z.object({\n  UNAUTH_POINTS: z.coerce.number().default(100),\n  UNAUTH_DURATION: z.coerce.number().default(60),\n  AUTH_POINTS: z.coerce.number().default(500),\n  AUTH_DURATION: z.coerce.number().default(60),\n});\n\nconst config = RateLimitConfigSchema.parse({\n  UNAUTH_POINTS: process.env.RATE_LIMIT_UNAUTH_POINTS,\n  UNAUTH_DURATION: process.env.RATE_LIMIT_UNAUTH_DURATION,\n  AUTH_POINTS: process.env.RATE_LIMIT_AUTH_POINTS,\n  AUTH_DURATION: process.env.RATE_LIMIT_AUTH_DURATION,\n});\n\nexport interface RateLimitConfig {\n  points: number;\n  duration: number;\n}\n\nexport class DistributedRateLimiter {\n  private static instance: DistributedRateLimiter;\n  private redis: Redis;\n  private logger: pino.Logger;\n  private breaker: Opossum<[string, number, number], RateLimiterRes>;\n  private limiters: Map<string, RateLimiterRedis> = new Map();\n\n  private constructor(redis: Redis) {\n    this.redis = redis;\n    this.logger = logger.child({ module: 'DistributedRateLimiter' });\n\n    this.breaker = new Opossum(\n      async (key: string, points: number, duration: number) => {\n        const limiter = this.getLimiter(key, points, duration);\n        return await limiter.consume(key);\n      },\n      {\n        timeout: 3000,\n        errorThresholdPercentage: 50,\n        resetTimeout: 30000,\n      }\n    );\n\n    this.breaker.on('open', () => this.logger.error('RateLimiter circuit breaker opened. Failing open.'));\n    this.breaker.on('close', () => this.logger.info('RateLimiter circuit breaker closed.'));\n  }\n\n  public static getInstance(redis: Redis): DistributedRateLimiter {\n    if (!DistributedRateLimiter.instance) {\n      DistributedRateLimiter.instance = new DistributedRateLimiter(redis);\n    }\n    return DistributedRateLimiter.instance;\n  }\n\n  private getLimiter(keyPrefix: string, points: number, duration: number): RateLimiterRedis {\n    if (!this.limiters.has(keyPrefix)) {\n      this.limiters.set(\n        keyPrefix,\n        new RateLimiterRedis({\n          storeClient: this.redis,\n          keyPrefix,\n          points,\n          duration,\n        })\n      );\n    }\n    return this.limiters.get(keyPrefix)!;\n  }\n\n  public middleware(overrideConfig?: RateLimitConfig) {\n    return async (req: Request, res: Response, next: NextFunction) => {\n      const correlationId = (req.headers['x-correlation-id'] as string) || uuidv4();\n      const userId = (req as any).user?.sub;\n      \n      const keyPrefix = userId ? 'auth' : 'anon';\n      const key = userId ? `auth:${userId}` : `anon:${req.ip}`;\n      \n      const limit = overrideConfig || (userId \n        ? { points: config.AUTH_POINTS, duration: config.AUTH_DURATION }\n        : { points: config.UNAUTH_POINTS, duration: config.UNAUTH_DURATION }\n      );\n\n      try {\n        await this.breaker.fire(keyPrefix, key, limit.points, limit.duration);\n        next();\n      } catch (err: any) {\n        if (err instanceof Error && (err as any).name === 'RateLimiterRes') {\n          const rateLimitErr = err as RateLimiterRes;\n          const retryAfter = Math.ceil(rateLimitErr.msBeforeNext / 1000) || 1;\n\n          this.logger.warn({ correlationId, key, event: 'RATE_LIMIT_EXCEEDED' }, 'Rate limit exceeded');\n          \n          res.setHeader('Retry-After', retryAfter.toString());\n          return res.status(429).json({\n            code: 'RATE_LIMIT_EXCEEDED',\n            message: 'Too many requests',\n            retryAfterSeconds: retryAfter,\n          });\n        }\n\n        this.logger.error({ correlationId, err, event: 'RATE_LIMITER_FAILURE' }, 'Rate limiter failed, failing open');\n        next();\n      }\n    };\n  }\n\n  public async getHealth(): Promise<{ status: 'ready' | 'degraded' | 'down' }> {\n    if (this.redis.status !== 'ready') {\n      return { status: 'down' };\n    }\n    if (this.breaker.opened) {\n      return { status: 'degraded' };\n    }\n    return { status: 'ready' };\n  }\n}\n",
+      "timestamp": "2026-04-03T23:29:23.841743Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "067E78BF02138BDA4E61BB7EABA14EC355E415A1A96E469FFBF86A5F27E97E59",
+    "timestamp": 1775258963
+  }
+}

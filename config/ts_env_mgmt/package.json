@@ -1,0 +1,27 @@
+{
+  "name": "complex-ecommerce-config-mgmt",
+  "version": "1.0.0",
+  "description": "Configuration and dependency management module for high-concurrency ecommerce backend",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint 'src/**/*.ts'",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "16.4.5",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.10",
+    "@typescript-eslint/eslint-plugin": "7.14.1",
+    "@typescript-eslint/parser": "7.14.1",
+    "eslint": "8.57.0",
+    "typescript": "5.5.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": "ACN Actuator",
+  "license": "UNLICENSED"
+}

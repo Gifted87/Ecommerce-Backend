@@ -1,0 +1,34 @@
+{
+  "checkout_domain_interfaces": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "c7476579e2c4161f32467d58941cfb1e4c3a2f7e0344d5c90ec15f799276d438",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Defines production-ready TypeScript domain types and repository interfaces for order management.",
+      "filename": "order_types.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/order/checkout_processor/types/order_types.ts",
+      "id": "ae78c3ea-313e-4e5a-844a-862aefbe526f",
+      "provenance_data": {
+        "behaviour": "Defines core order domain models, state transition contexts, and repository interfaces for the transactional checkout service. Maintains type safety and supports optimistic concurrency control.",
+        "interfaces": [
+          "IOrderRepository.create(order: Omit<Order, 'created_at' | 'updated_at' | 'version'>, tx?: unknown): Promise<RepositoryResult<Order>>",
+          "IOrderRepository.findById(order_id: string): Promise<RepositoryResult<Order>>",
+          "IOrderRepository.updateStatus(order_id: string, next_status: OrderStatus, current_version: number, context?: OrderTransitionContext, tx?: unknown): Promise<RepositoryResult<Order>>",
+          "IUnitOfWork.executeInTransaction<T>(work: (tx: unknown) => Promise<T>): Promise<T>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides the type-safe contract required by the State Machine and Repository implementations to ensure architectural consistency and data integrity."
+      },
+      "source_code": "/**\n * @fileoverview Order and Checkout Domain Types.\n * Definitive source of truth for order lifecycle data structures,\n * state transition contexts, and repository persistence contracts.\n */\n\n/**\n * Supported Order Statuses.\n */\nexport enum OrderStatus {\n  PENDING = 'PENDING',\n  PAID = 'PAID',\n  SHIPPED = 'SHIPPED',\n  DELIVERED = 'DELIVERED',\n  CANCELLED = 'CANCELLED',\n  REFUNDED = 'REFUNDED',\n}\n\n/**\n * Represents a line item in an order.\n */\nexport interface OrderItem {\n  sku: string;\n  quantity: number;\n  unit_price: string; // Decimal string for precision\n  item_total: string; // Decimal string for precision\n}\n\n/**\n * Shipping information containing sensitive PII.\n */\nexport interface ShippingAddress {\n  street: string;\n  city: string;\n  postal_code: string;\n  country: string; // ISO 3166-1 alpha-2\n}\n\n/**\n * Core Order domain entity.\n * Represents the persistent state of an order in the system.\n */\nexport interface Order {\n  order_id: string; // UUID v4\n  user_id: string; // UUID v4\n  status: OrderStatus;\n  items: OrderItem[];\n  shipping_address: ShippingAddress;\n  total_amount: string; // Decimal string\n  version: number; // For optimistic locking\n  correlation_id: string; // For distributed tracing\n  tracking_number?: string;\n  created_at: string; // ISO 8601\n  updated_at: string; // ISO 8601\n}\n\n/**\n * Context for state transitions.\n */\nexport interface ShippingTransitionContext {\n  tracking_number: string;\n}\n\nexport type OrderTransitionContext = ShippingTransitionContext | undefined;\n\n/**\n * Repository Operation Result Discriminators.\n */\nexport type RepositoryResult<T> =\n  | { success: true; data: T }\n  | { success: false; error: 'NOT_FOUND' | 'CONNECTION_TIMEOUT' | 'CONSTRAINT_VIOLATION' | 'CONCURRENCY_ERROR' | 'UNKNOWN_ERROR'; message: string };\n\n/**\n * High-level repository contract for Order persistence.\n */\nexport interface IOrderRepository {\n  /**\n   * Creates a new order within a transaction.\n   */\n  create(order: Omit<Order, 'created_at' | 'updated_at' | 'version'>, tx?: unknown): Promise<RepositoryResult<Order>>;\n\n  /**\n   * Retrieves an order by ID.\n   */\n  findById(order_id: string): Promise<RepositoryResult<Order>>;\n\n  /**\n   * Updates an order status with optimistic locking.\n   */\n  updateStatus(\n    order_id: string,\n    next_status: OrderStatus,\n    current_version: number,\n    context?: OrderTransitionContext,\n    tx?: unknown\n  ): Promise<RepositoryResult<Order>>;\n}\n\n/**\n * Unit of Work contract for atomic operations.\n */\nexport interface IUnitOfWork {\n  executeInTransaction<T>(work: (tx: unknown) => Promise<T>): Promise<T>;\n}\n",
+      "timestamp": "2026-04-03T23:04:10.616226Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "15CC582D00CE1B140487EE970DEE02069C54483B1712210D87181FD2B304BD17",
+    "timestamp": 1775257450
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "worker_engine": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "7a3e89c1b2c4d6e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implemented a production-ready BackgroundWorkerOrchestrator for managing asynchronous inventory and cache tasks.",
+      "filename": "BackgroundWorkerOrchestrator.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/bootstrap/workers/BackgroundWorkerOrchestrator.ts",
+      "id": "fdcebed4-e46a-479f-8746-d30dfb06a0c7",
+      "provenance_data": {
+        "behaviour": "Initializes a background worker orchestrator that consumes from Kafka, processes tasks using registered handlers with retry logic and circuit breaking, and manages service lifecycle.",
+        "interfaces": [
+          "registerTask(task: TaskDefinition): void",
+          "start(topics: string[]): Promise<void>",
+          "shutdown(): Promise<void>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a resilient, production-grade infrastructure component for executing background tasks (reconciliation/invalidation) in a distributed Kafka/Redis architecture."
+      },
+      "source_code": "import { Kafka, Producer, Consumer, EachMessagePayload } from 'kafkajs';\nimport Redis from 'ioredis';\nimport Opossum from 'opossum';\nimport { Logger } from 'pino';\nimport { setTimeout } from 'timers/promises';\n\nexport enum WorkerState {\n  BOOTSTRAP = 'BOOTSTRAP',\n  READY = 'READY',\n  RUNNING = 'RUNNING',\n  STOPPING = 'STOPPING',\n  STOPPED = 'STOPPED',\n}\n\nexport interface TaskDefinition {\n  type: string;\n  execute: (payload: any) => Promise<void>;\n  retryPolicy: {\n    maxRetries: number;\n    baseDelayMs: number;\n  };\n}\n\nexport class BackgroundWorkerOrchestrator {\n  private state: WorkerState = WorkerState.BOOTSTRAP;\n  private readonly workers: Map<string, TaskDefinition> = new Map();\n  private readonly circuitBreaker: Opossum;\n  private consumer: Consumer | null = null;\n  private producer: Producer | null = null;\n\n  constructor(\n    private readonly kafka: Kafka,\n    private readonly redis: Redis,\n    private readonly logger: Logger,\n    private readonly groupId: string\n  ) {\n    this.circuitBreaker = new Opossum(async (fn: () => Promise<any>) => await fn(), {\n      timeout: 30000,\n      errorThresholdPercentage: 50,\n      resetTimeout: 30000,\n    });\n\n    this.setupLifecycleHooks();\n  }\n\n  private setupLifecycleHooks(): void {\n    process.on('SIGTERM', async () => await this.shutdown());\n    process.on('SIGINT', async () => await this.shutdown());\n  }\n\n  public registerTask(task: TaskDefinition): void {\n    this.workers.set(task.type, task);\n  }\n\n  public async start(topics: string[]): Promise<void> {\n    this.logger.info('Orchestrator initializing...');\n    \n    this.consumer = this.kafka.consumer({ groupId: this.groupId });\n    this.producer = this.kafka.producer({ allowAutoTopicCreation: false });\n\n    await this.consumer.connect();\n    await this.producer.connect();\n\n    for (const topic of topics) {\n      await this.consumer.subscribe({ topic, fromBeginning: false });\n    }\n\n    this.state = WorkerState.READY;\n    this.logger.info('Orchestrator READY.');\n\n    await this.consumer.run({\n      eachMessage: async (payload: EachMessagePayload) => await this.handleMessage(payload),\n    });\n\n    this.state = WorkerState.RUNNING;\n  }\n\n  private async handleMessage(payload: EachMessagePayload): Promise<void> {\n    if (this.state !== WorkerState.RUNNING) return;\n\n    const { message, topic } = payload;\n    const rawData = message.value?.toString();\n    if (!rawData) return;\n\n    try {\n      const data = JSON.parse(rawData);\n      const task = this.workers.get(data.type);\n\n      if (!task) {\n        this.logger.warn({ taskType: data.type }, 'No handler registered for task type');\n        return;\n      }\n\n      await this.executeWithRetry(task, data.payload);\n    } catch (err) {\n      this.logger.error({ err, topic }, 'Failed to process message');\n      await this.moveToDLQ(payload);\n    }\n  }\n\n  private async executeWithRetry(task: TaskDefinition, payload: any): Promise<void> {\n    let attempts = 0;\n    const { maxRetries, baseDelayMs } = task.retryPolicy;\n\n    while (attempts <= maxRetries) {\n      try {\n        await this.circuitBreaker.fire(async () => await task.execute(payload));\n        return;\n      } catch (err) {\n        attempts++;\n        if (attempts > maxRetries) {\n          this.logger.error({ err, taskType: task.type }, 'Max retries exceeded');\n          throw err;\n        }\n        const delay = baseDelayMs * Math.pow(2, attempts - 1);\n        await setTimeout(delay);\n      }\n    }\n  }\n\n  private async moveToDLQ(payload: EachMessagePayload): Promise<void> {\n    if (!this.producer) return;\n    try {\n      await this.producer.send({\n        topic: 'dead-letter-queue',\n        messages: [{ value: payload.message.value }],\n      });\n    } catch (err) {\n      this.logger.error({ err }, 'Critical failure: Could not move to DLQ');\n    }\n  }\n\n  private async shutdown(): Promise<void> {\n    if (this.state === WorkerState.STOPPING || this.state === WorkerState.STOPPED) return;\n    \n    this.state = WorkerState.STOPPING;\n    this.logger.info('Orchestrator shutting down...');\n\n    try {\n      await this.consumer?.disconnect();\n      await this.producer?.disconnect();\n      await this.redis.quit();\n    } catch (err) {\n      this.logger.error({ err }, 'Error during shutdown');\n    } finally {\n      this.state = WorkerState.STOPPED;\n      this.logger.info('Orchestrator STOPPED.');\n      process.exit(0);\n    }\n  }\n}\n",
+      "timestamp": "2026-04-03T23:21:28.731057Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "36941ADFC0373E38A0F5E1A89AB2CB2DEDD064B06AAA94761EFDB33581E6890A",
+    "timestamp": 1775258488
+  }
+}

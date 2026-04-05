@@ -1,0 +1,35 @@
+{
+  "config_module": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "815EF190B1D86E21EF89540D2F82858D3C19F7CCC0982DEB694033D94D1CB03B",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of a robust, production-ready ConfigurationProvider for the inventory reconciliation service.",
+      "filename": "configuration_provider.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/services/reconciliation/core/config/configuration_provider.ts",
+      "id": "2bd91557-e2e3-4763-a3cd-0be8c92ba246",
+      "provenance_data": {
+        "behaviour": "Initializes a singleton configuration provider that validates environment variables against a Zod schema upon application startup. It provides methods for safe configuration retrieval, diagnostic reporting, and PII-aware log redaction.",
+        "interfaces": [
+          "static initialize(logger: Logger): ConfigurationProvider",
+          "static getInstance(): ConfigurationProvider",
+          "get config(): AppConfig",
+          "getDiagnostics(): Record<string, any>",
+          "redact(data: Record<string, any>): Record<string, any>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a centralized, type-safe, and immutable configuration service for the inventory reconciliation component, ensuring runtime environment settings are validated against schemas before system startup."
+      },
+      "source_code": "import { z } from 'zod';\nimport { Logger } from 'pino';\n\n/**\n * Custom error class for configuration-related issues during bootstrap.\n */\nexport class ConfigurationError extends Error {\n  constructor(message: string, public readonly details?: any) {\n    super(message);\n    this.name = 'ConfigurationError';\n  }\n}\n\n/**\n * Strict schema definition for application configuration using Zod.\n * Ensures data integrity and type safety at the boundaries.\n */\nconst AppConfigSchema = z.object({\n  NODE_ENV: z.enum(['development', 'staging', 'production']).default('production'),\n  DATABASE_URL: z.string().url(),\n  KAFKA_BROKERS: z.string().transform((val) => val.split(',')),\n  KAFKA_CLIENT_ID: z.string().min(1),\n  REDIS_URL: z.string().url(),\n  RECONCILIATION_FREQUENCY_MS: z.coerce.number().positive().default(60000),\n  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),\n});\n\ntype AppConfig = z.infer<typeof AppConfigSchema>;\n\n/**\n * ConfigurationProvider ensures immutable, validated application settings.\n * Implements the Singleton pattern to provide a centralized configuration source.\n */\nexport class ConfigurationProvider {\n  private static instance: ConfigurationProvider;\n  private readonly _config: AppConfig;\n  private _isReady: boolean = false;\n\n  private constructor(private readonly logger: Logger) {\n    const rawConfig = {\n      NODE_ENV: process.env.NODE_ENV,\n      DATABASE_URL: process.env.DATABASE_URL,\n      KAFKA_BROKERS: process.env.KAFKA_BROKERS,\n      KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID,\n      REDIS_URL: process.env.REDIS_URL,\n      RECONCILIATION_FREQUENCY_MS: process.env.RECONCILIATION_FREQUENCY_MS,\n      LOG_LEVEL: process.env.LOG_LEVEL,\n    };\n\n    const result = AppConfigSchema.safeParse(rawConfig);\n\n    if (!result.success) {\n      const errorMsg = 'Configuration validation failed';\n      this.logger.error({ errors: result.error.format() }, errorMsg);\n      throw new ConfigurationError(errorMsg, result.error.format());\n    }\n\n    this._config = result.data;\n    this._isReady = true;\n    this.logger.info('Configuration initialized and validated successfully');\n  }\n\n  /**\n   * Initializes the Singleton ConfigurationProvider. Must be called on boot.\n   */\n  public static initialize(logger: Logger): ConfigurationProvider {\n    if (!ConfigurationProvider.instance) {\n      ConfigurationProvider.instance = new ConfigurationProvider(logger);\n    }\n    return ConfigurationProvider.instance;\n  }\n\n  /**\n   * Retrieves the current configuration instance.\n   */\n  public static getInstance(): ConfigurationProvider {\n    if (!ConfigurationProvider.instance) {\n      throw new ConfigurationError('ConfigurationProvider must be initialized before access.');\n    }\n    return ConfigurationProvider.instance;\n  }\n\n  /**\n   * Returns the validated configuration object.\n   */\n  public get config(): AppConfig {\n    if (!this._isReady) {\n      throw new ConfigurationError('Attempted to access configuration before initialization.');\n    }\n    return this._config;\n  }\n\n  /**\n   * Returns sanitized diagnostic info for logging without exposing secrets.\n   */\n  public getDiagnostics(): Record<string, any> {\n    const { DATABASE_URL, REDIS_URL, ...safeConfig } = this._config;\n    return {\n      ...safeConfig,\n      DB_HOST: new URL(DATABASE_URL).hostname,\n      REDIS_HOST: new URL(REDIS_URL).hostname,\n    };\n  }\n\n  /**\n   * Redacts sensitive information from log objects.\n   */\n  public redact(data: Record<string, any>): Record<string, any> {\n    const sensitiveKeys = ['password', 'secret', 'token', 'authorization', 'credential'];\n    const redacted = { ...data };\n\n    for (const key in redacted) {\n      if (sensitiveKeys.some((s) => key.toLowerCase().includes(s))) {\n        redacted[key] = '[REDACTED]';\n      } else if (typeof redacted[key] === 'object' && redacted[key] !== null) {\n        redacted[key] = this.redact(redacted[key]);\n      }\n    }\n    return redacted;\n  }\n}\n",
+      "timestamp": "2026-04-03T23:10:30.386024Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "FD9CBFBFFCC63A4C19E4847F3EB22A154A8984BC9CC4E5745A0FFA3CEDA31617",
+    "timestamp": 1775257830
+  }
+}

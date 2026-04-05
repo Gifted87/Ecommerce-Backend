@@ -1,0 +1,27 @@
+{
+  "name": "@ecommerce/messaging-engine",
+  "version": "1.0.0",
+  "description": "Production-hardened, high-concurrency event-driven communication layer for distributed ecommerce backends.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint 'src/**/*.ts'",
+    "format": "prettier --write 'src/**/*.ts'"
+  },
+  "dependencies": {
+    "kafkajs": "2.2.4",
+    "zod": "3.22.4",
+    "opossum": "8.1.0",
+    "pino": "8.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.11.0",
+    "typescript": "5.3.3",
+    "prettier": "3.2.5",
+    "eslint": "8.57.0"
+  }
+}

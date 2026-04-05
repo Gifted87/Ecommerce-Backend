@@ -1,0 +1,32 @@
+{
+  "database_migration_scripts": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "4560411a7c065f410668b57731a7c9384589d90f23579051416e866676839352",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Knex migration scripts for product catalog and inventory tables with integrated ACID constraints.",
+      "filename": "migration_products_inventory.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/migrations/migration_products_inventory.ts",
+      "id": "ee21d1d3-a854-4729-b479-0f431ac74e52",
+      "provenance_data": {
+        "behaviour": "Creates 'products' and 'inventory' tables with strict schema enforcement, unique constraints, and check constraints for domain integrity. Indexes are added for query optimization.",
+        "interfaces": [
+          "up(knex: Knex): Promise<void>",
+          "down(knex: Knex): Promise<void>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Ensures foundational data structure existence and enforces business rules (e.g., non-negative stock) directly within the database engine for ACID compliance."
+      },
+      "source_code": "import { Knex } from 'knex';\n\n/**\n * Migration: Create Catalog and Inventory\n * \n * Sets up the product catalog and real-time inventory tracking system.\n * Implements strict ACID constraints and ensures domain integrity at the database level.\n */\n\nexport async function up(knex: Knex): Promise<void> {\n  // Create products table\n  await knex.schema.createTable('products', (table) => {\n    table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));\n    table.string('sku').notNullable().unique();\n    table.string('name').notNullable();\n    table.decimal('price', 14, 2).notNullable();\n    table.jsonb('metadata').nullable();\n    table.timestamp('created_at').defaultTo(knex.fn.now());\n    table.timestamp('updated_at').defaultTo(knex.fn.now());\n\n    // Constraint for SKU format validation [A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+\n    table.check('sku ~* \\'^[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+$\\'', [], 'products_sku_format_check');\n  });\n\n  // Create B-tree index on SKU for fast lookups\n  await knex.raw('CREATE INDEX products_sku_index ON products (sku)');\n\n  // Create inventory table\n  await knex.schema.createTable('inventory', (table) => {\n    table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));\n    table.uuid('product_id').notNullable().references('id').inTable('products').unique();\n    table.integer('total_stock').notNullable();\n    table.integer('reserved_stock').notNullable();\n    table.timestamp('created_at').defaultTo(knex.fn.now());\n    table.timestamp('updated_at').defaultTo(knex.fn.now());\n\n    // ACID Integrity constraints\n    table.check('total_stock >= 0', [], 'inventory_total_stock_nonnegative_check');\n    table.check('reserved_stock >= 0', [], 'inventory_reserved_stock_nonnegative_check');\n    table.check('total_stock >= reserved_stock', [], 'inventory_stock_logical_integrity_check');\n  });\n\n  // Create B-tree index on product_id for fast joins\n  await knex.raw('CREATE INDEX inventory_product_id_index ON inventory (product_id)');\n}\n\nexport async function down(knex: Knex): Promise<void> {\n  // Drop tables in reverse order of creation\n  await knex.schema.dropTableIfExists('inventory');\n  await knex.schema.dropTableIfExists('products');\n}\n",
+      "timestamp": "2026-04-03T23:04:41.416026Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "593FC6B86F9BDB02F9D527C615FED652B15F97F25772DF70BE061274A638DA02",
+    "timestamp": 1775257481
+  }
+}

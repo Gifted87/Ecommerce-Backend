@@ -1,0 +1,37 @@
+{
+  "auth_schemas": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "E0954014D1F85C534E0E4157E7398247E8548C36F7FF8F97C7F6343B019CCD4C",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of user domain data schemas and validation logic for the authentication module.",
+      "filename": "user_schema.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/modules/auth/models/user_schema.ts",
+      "id": "dbcb22c9-8c3d-4554-8717-044ac1ebb62a",
+      "provenance_data": {
+        "behaviour": "Defines robust data validation schemas using Zod for user registration and profile management, including complex password enforcement. Provides TypeScript interfaces for internal database models and safe public-facing user objects, with utility functions for type conversion and schema validation.",
+        "interfaces": [
+          "UserRegistrationSchema: z.ZodObject",
+          "UserUpdateSchema: z.ZodObject",
+          "UserModel: interface",
+          "PublicUser: type",
+          "toPublicUser(user: UserModel): PublicUser",
+          "validateRegistration(data: unknown): z.SafeParseReturnType",
+          "validateUpdate(data: unknown): z.SafeParseReturnType"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides strict, production-ready validation and type safety for user domain operations, ensuring data integrity before persistence."
+      },
+      "source_code": "import { z } from 'zod';\n\n/**\n * @fileoverview User domain data schemas and validation logic for authentication and profile management.\n * Provides strictly enforced Zod schemas for user lifecycle management.\n */\n\n/**\n * Password complexity requirements:\n * - Minimum 12 characters.\n * - At least one uppercase letter.\n * - At least one lowercase letter.\n * - At least one digit.\n * - At least one special character.\n */\nconst passwordSchema = z\n  .string()\n  .min(12, 'Password must be at least 12 characters long')\n  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')\n  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')\n  .regex(/[0-9]/, 'Password must contain at least one digit')\n  .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');\n\n/**\n * Zod schema for user registration inputs.\n */\nexport const UserRegistrationSchema = z.object({\n  email: z.string().email('Invalid email format').toLowerCase(),\n  password: passwordSchema,\n  username: z.string().min(3, 'Username must be at least 3 characters long').max(50),\n  first_name: z.string().min(1, 'First name is required').max(100),\n  last_name: z.string().min(1, 'Last name is required').max(100),\n});\n\n/**\n * Zod schema for profile updates.\n * Excludes immutable fields like user_id and created_at.\n */\nexport const UserUpdateSchema = z.object({\n  username: z.string().min(3).max(50).optional(),\n  first_name: z.string().min(1).max(100).optional(),\n  last_name: z.string().min(1).max(100).optional(),\n  email: z.string().email().toLowerCase().optional(),\n});\n\n/**\n * Internal database user structure.\n */\nexport interface UserModel {\n  user_id: string; // UUID v4\n  email: string;\n  username: string;\n  password_hash: string;\n  salt: string;\n  first_name: string;\n  last_name: string;\n  mfa_secret: string | null;\n  is_verified: boolean;\n  created_at: Date;\n  updated_at: Date;\n}\n\n/**\n * Publicly exposed user profile (sensitive fields omitted).\n */\nexport type PublicUser = Omit<UserModel, 'password_hash' | 'salt' | 'mfa_secret'>;\n\n/**\n * Creates a public-facing user profile from the internal database model.\n * @param user The full user database model.\n * @returns The safe public user representation.\n */\nexport function toPublicUser(user: UserModel): PublicUser {\n  const { password_hash, salt, mfa_secret, ...publicUser } = user;\n  return publicUser;\n}\n\n/**\n * Validates registration data against the UserRegistrationSchema.\n * Optimized for high-throughput environments.\n */\nexport const validateRegistration = (data: unknown) => {\n  return UserRegistrationSchema.safeParse(data);\n};\n\n/**\n * Validates update data against the UserUpdateSchema.\n */\nexport const validateUpdate = (data: unknown) => {\n  return UserUpdateSchema.safeParse(data);\n};\n",
+      "timestamp": "2026-04-03T22:50:50.631606Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "DDB157FCBDEAD9610B8C4619407CFCDB23CD973BDC61E95B127F66986A4910E9",
+    "timestamp": 1775256650
+  }
+}

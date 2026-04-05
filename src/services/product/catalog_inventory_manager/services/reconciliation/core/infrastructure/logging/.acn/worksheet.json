@@ -1,0 +1,31 @@
+{
+  "logging_infrastructure": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "b16921270ec41cd8bf99fdaee33caa91433d51e43489efc9baf706b19adfc125",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implemented a centralized, high-performance, and secure logging service for the reconciliation infrastructure using Pino.",
+      "filename": "index.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/services/reconciliation/core/infrastructure/logging/index.ts",
+      "id": "894b9ea6-efd7-4b8e-b093-dc93f73f31f1",
+      "provenance_data": {
+        "behaviour": "Provides a production-ready, structured JSON logging service with PII redaction and hierarchical context support, integrated via pino.",
+        "interfaces": [
+          "createLogger(context: LogContext): Logger"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Standardizes all logging across the reconciliation service, ensuring observability, compliance, and PII safety."
+      },
+      "source_code": "import pino, { Logger, LoggerOptions } from 'pino';\nimport os from 'os';\n\n/**\n * @fileoverview Centralized, high-performance structured logging service\n * for the reconciliation inventory system. Implements PII redaction,\n * asynchronous JSON serialization, and hierarchical context injection.\n */\n\n/**\n * List of sensitive keys that must be redacted from all log outputs\n * to ensure compliance with PII/security requirements.\n */\nconst REDACTED_KEYS = [\n  'password',\n  'credit_card',\n  'authorization',\n  'token',\n  'cookie',\n  'set-cookie',\n  'secret',\n  'access_token',\n  'refresh_token',\n  'cvv'\n];\n\n/**\n * Pino configuration with production-ready defaults.\n * Configured for non-blocking, asynchronous JSON output.\n */\nconst loggerOptions: LoggerOptions = {\n  level: process.env.LOG_LEVEL || 'info',\n  redact: {\n    paths: REDACTED_KEYS,\n    censor: '[REDACTED]'\n  },\n  formatters: {\n    level: (label: string) => ({ level: label }),\n  },\n  timestamp: pino.stdTimeFunctions.isoTime,\n  base: {\n    pid: process.pid,\n    hostname: os.hostname(),\n    service: 'reconciliation-service'\n  },\n  errorKey: 'error',\n  serializers: {\n    error: pino.stdSerializers.err,\n  },\n};\n\n/**\n * Root logger instance singleton.\n */\nconst rootLogger: Logger = pino(loggerOptions);\n\n/**\n * Interface defining the mandatory and optional metadata for logs.\n * All logs must include a 'module' context for granular filtering.\n */\nexport interface LogContext {\n  module: string;\n  requestId?: string;\n  sku?: string;\n  batchProcessId?: string;\n  [key: string]: any;\n}\n\n/**\n * Creates a child logger with injected hierarchical context.\n * Useful for distributed tracing and module-level debugging across\n * the reconciliation pipeline.\n *\n * @param context - The metadata object containing 'module' and additional context keys.\n * @returns A pino logger instance containing the injected context.\n * @throws Error if context.module is missing.\n */\nexport const createLogger = (context: LogContext): Logger => {\n  if (!context || typeof context.module !== 'string') {\n    throw new Error('Logger context must include a \"module\" property for structured traceability.');\n  }\n  return rootLogger.child(context);\n};\n\n/**\n * Default logger instance for global usage across the reconciliation service.\n */\nconst logger: Logger = rootLogger.child({ module: 'global' });\n\nexport default logger;\n",
+      "timestamp": "2026-04-03T23:11:37.486861Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "C82F3C4952A85CAF999D13E6B5596A8FEF03E192A38965710E8E885A61EF7E3F",
+    "timestamp": 1775257897
+  }
+}

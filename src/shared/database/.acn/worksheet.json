@@ -1,0 +1,35 @@
+{
+  "infra_db_client": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "e224e70e2898b17a021008d65452d37c87c7a72f07090b8f6154378772a83f94",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "A production-ready base repository class for PostgreSQL interactions, featuring integrated circuit breaking via Opossum, transaction management, and Zod-based schema validation.",
+      "filename": "DatabaseRepository.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/shared/database/DatabaseRepository.ts",
+      "id": "a76dd417-bf65-4a48-9f80-cfe059332f18",
+      "provenance_data": {
+        "behaviour": "Provides a generic, transaction-aware, fault-tolerant repository base class using Knex for PostgreSQL, implementing circuit breaking and schema validation.",
+        "interfaces": [
+          "transaction<T>(work: (trx: Knex.Transaction) => Promise<T>): Promise<T>",
+          "findById(id: ID, schema: ZodSchema): Promise<T | null>",
+          "create(data: Partial<T>, schema: ZodSchema): Promise<T>",
+          "update(id: ID, data: Partial<T>, schema: ZodSchema): Promise<T>",
+          "delete(id: ID): Promise<void>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Facilitates consistent, resilient, and type-safe database interactions across domain repositories."
+      },
+      "source_code": "import knex, { Knex } from 'knex';\nimport { Logger } from 'pino';\nimport CircuitBreaker from 'opossum';\nimport { ZodSchema } from 'zod';\n\n/**\n * Domain-specific exception for database-related errors.\n */\nexport class RepositoryError extends Error {\n  constructor(public message: string, public code: string, public originalError?: any) {\n    super(message);\n    this.name = 'RepositoryError';\n  }\n}\n\n/**\n * Interface for database transaction provider.\n */\nexport interface IUnitOfWork {\n  transaction<T>(work: (trx: Knex.Transaction) => Promise<T>): Promise<T>;\n}\n\n/**\n * Base Repository providing standard CRUD operations and transaction support.\n */\nexport abstract class DatabaseRepository<T, ID> implements IUnitOfWork {\n  protected readonly knex: Knex;\n  protected readonly logger: Logger;\n  protected readonly breaker: CircuitBreaker;\n\n  constructor(protected readonly db: Knex, protected readonly log: Logger, protected readonly tableName: string) {\n    this.knex = db;\n    this.logger = log.child({ module: 'repository', table: tableName });\n\n    this.breaker = new CircuitBreaker(async (fn: () => Promise<any>) => await fn(), {\n      timeout: 5000,\n      errorThresholdPercentage: 50,\n      resetTimeout: 30000,\n    });\n  }\n\n  /**\n   * Executes a transactional block.\n   */\n  public async transaction<T>(work: (trx: Knex.Transaction) => Promise<T>): Promise<T> {\n    return await this.knex.transaction(async (trx) => {\n      try {\n        return await work(trx);\n      } catch (error) {\n        this.logger.error({ error }, 'Transaction failed, rolling back');\n        throw error;\n      }\n    });\n  }\n\n  protected async findById(id: ID, schema: ZodSchema): Promise<T | null> {\n    return await this.breaker.fire(async () => {\n      const start = Date.now();\n      try {\n        const result = await this.knex(this.tableName).where({ id }).first();\n        if (!result) return null;\n        const parsed = schema.parse(result);\n        this.logger.debug({ duration: Date.now() - start, id }, 'Entity found');\n        return parsed as T;\n      } catch (error) {\n        this.logger.error({ error, id }, 'Database query failed');\n        throw new RepositoryError('Query execution failed', 'DB_QUERY_ERROR', error);\n      }\n    });\n  }\n\n  protected async create(data: Partial<T>, schema: ZodSchema): Promise<T> {\n    return await this.breaker.fire(async () => {\n      const start = Date.now();\n      try {\n        const [result] = await this.knex(this.tableName).insert(data).returning('*');\n        const parsed = schema.parse(result);\n        this.logger.debug({ duration: Date.now() - start }, 'Entity created');\n        return parsed as T;\n      } catch (error) {\n        this.logger.error({ error, data }, 'Create operation failed');\n        throw new RepositoryError('Create operation failed', 'DB_INSERT_ERROR', error);\n      }\n    });\n  }\n\n  protected async update(id: ID, data: Partial<T>, schema: ZodSchema): Promise<T> {\n    return await this.breaker.fire(async () => {\n      const start = Date.now();\n      try {\n        const [result] = await this.knex(this.tableName).where({ id }).update(data).returning('*');\n        if (!result) throw new RepositoryError('Entity not found', 'NOT_FOUND');\n        const parsed = schema.parse(result);\n        this.logger.debug({ duration: Date.now() - start, id }, 'Entity updated');\n        return parsed as T;\n      } catch (error) {\n        this.logger.error({ error, id }, 'Update operation failed');\n        throw new RepositoryError('Update operation failed', 'DB_UPDATE_ERROR', error);\n      }\n    });\n  }\n\n  protected async delete(id: ID): Promise<void> {\n    return await this.breaker.fire(async () => {\n      const start = Date.now();\n      try {\n        await this.knex(this.tableName).where({ id }).del();\n        this.logger.debug({ duration: Date.now() - start, id }, 'Entity deleted');\n      } catch (error) {\n        this.logger.error({ error, id }, 'Delete operation failed');\n        throw new RepositoryError('Delete operation failed', 'DB_DELETE_ERROR', error);\n      }\n    });\n  }\n}\n",
+      "timestamp": "2026-04-03T23:00:07.648795Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "50121FE8D3D3CAA0DE2D6DBA15FBF753F0E04E1AF6FFB089A342B6CD3AD2675F",
+    "timestamp": 1775257207
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "order_state_manager_impl": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "7d627c2688f8d6840742f5342a549d47935741696541f53d5a4401826f4f1345",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "OrderStateManager implementation for coordinating order lifecycle state transitions with ACID compliance and event-driven architecture.",
+      "filename": "OrderStateManager.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/order/checkout_processor/core/OrderStateManager.ts",
+      "id": "8b195e63-48c7-49bb-bab0-1855a3940677",
+      "provenance_data": {
+        "behaviour": "Orchestrates order state transitions using distributed locking, database transactions, and event publication. Enforces state machine rules and circuit breaking.",
+        "interfaces": [
+          "transitionOrder(orderId: string, targetStatus: OrderStatus, metadata?: { tracking_number?: string }): Promise<OrderModel>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a thread-safe, resilient, and atomic mechanism for managing the ecommerce order lifecycle, ensuring data integrity across distributed system components."
+      },
+      "source_code": "import { Logger } from 'pino';\nimport Opossum from 'opossum';\nimport { \n  OrderStatus, \n  validateStateTransition, \n  OrderModel \n} from '../../../domain/order_schemas';\nimport { DistributedLockService } from '../../locking/DistributedLockService';\nimport { CheckoutEventProducer } from '../../events/CheckoutEventProducer';\n\n/**\n * Interface for the Order repository dependency.\n */\nexport interface IOrderRepository {\n  findById(orderId: string): Promise<OrderModel | null>;\n  updateStatus(orderId: string, status: OrderStatus, trackingNumber?: string): Promise<OrderModel>;\n  runInTransaction<T>(callback: () => Promise<T>): Promise<T>;\n}\n\n/**\n * Custom error class for order management failures.\n */\nexport class OrderStateError extends Error {\n  constructor(public message: string, public code: string) {\n    super(message);\n    this.name = 'OrderStateError';\n  }\n}\n\n/**\n * OrderStateManager coordinates order lifecycle state transitions.\n * It ensures ACID compliance, atomicity via locking, and event consistency.\n */\nexport class OrderStateManager {\n  private readonly breaker: Opossum;\n\n  constructor(\n    private readonly repository: IOrderRepository,\n    private readonly lockService: DistributedLockService,\n    private readonly eventProducer: CheckoutEventProducer,\n    private readonly logger: Logger\n  ) {\n    // Circuit breaker tuned for production: 3s timeout\n    const options = {\n      timeout: 3000,\n      errorThresholdPercentage: 50,\n      resetTimeout: 30000,\n    };\n\n    this.breaker = new Opossum(this.executeTransition.bind(this), options);\n  }\n\n  /**\n   * Primary entry point to transition an order status.\n   */\n  public async transitionOrder(\n    orderId: string,\n    targetStatus: OrderStatus,\n    metadata?: { tracking_number?: string }\n  ): Promise<OrderModel> {\n    this.logger.info({ orderId, targetStatus, metadata }, 'Attempting order state transition');\n\n    try {\n      return await this.breaker.fire(orderId, targetStatus, metadata);\n    } catch (error) {\n      this.logger.error({ orderId, targetStatus, error }, 'Order transition failed');\n      throw error;\n    }\n  }\n\n  /**\n   * Internal logic executed within circuit breaker and distributed lock.\n   */\n  private async executeTransition(\n    orderId: string,\n    targetStatus: OrderStatus,\n    metadata?: { tracking_number?: string }\n  ): Promise<OrderModel> {\n    return await this.lockService.withLock(orderId, async () => {\n      // 1. Fetch current order\n      const order = await this.repository.findById(orderId);\n      if (!order) {\n        throw new OrderStateError(`Order not found: ${orderId}`, 'NOT_FOUND');\n      }\n\n      // 2. Validate transition\n      const validation = validateStateTransition(order.status, targetStatus, metadata);\n      if (!validation.valid) {\n        throw new OrderStateError(validation.error || 'Invalid transition', 'INVALID_TRANSITION');\n      }\n\n      // Idempotency check: if current status already equals target, return order\n      if (order.status === targetStatus) {\n        this.logger.info({ orderId, status: targetStatus }, 'Order already at target status, skipping');\n        return order;\n      }\n\n      // 3. Mutate DB and Publish Event in Transaction\n      return await this.repository.runInTransaction(async () => {\n        const updatedOrder = await this.repository.updateStatus(\n          orderId,\n          targetStatus,\n          metadata?.tracking_number\n        );\n\n        try {\n          await this.eventProducer.publishOrderUpdated(updatedOrder);\n        } catch (eventError) {\n          this.logger.error({ orderId, error: eventError }, 'Failed to publish event, rolling back transaction');\n          // Re-throw to trigger transaction rollback if critical\n          throw new OrderStateError('Event publication failed, rolling back', 'TRANSACTION_ROLLBACK');\n        }\n\n        this.logger.info({ orderId, prevStatus: order.status, newStatus: targetStatus }, 'Order status updated successfully');\n        return updatedOrder;\n      });\n    });\n  }\n}\n",
+      "timestamp": "2026-04-03T23:08:59.825806Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "34BFDB40FEA00346A42817A887993B5936E844DF260CF7438A7EE8C5BE0BCD65",
+    "timestamp": 1775257739
+  }
+}

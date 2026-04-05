@@ -1,0 +1,31 @@
+{
+  "auth_security_middleware": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "e6c27c244c06f71d53267d3000676443c2c10313f89025170d740a320626b761",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of production-grade authentication and MFA enforcement middleware using JWT and Redis.",
+      "filename": "auth.middleware.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/user/auth_mfa_module/middleware/auth.middleware.ts",
+      "id": "ed8d40ca-2f55-48b8-96fe-4e3fd6bd6a2d",
+      "provenance_data": {
+        "behaviour": "Intercepts incoming HTTP requests, validates JWT structure/signature/expiry, performs Redis-based session validation, enforces MFA status via Redis keys, and checks RBAC roles. Attaches user context to Request object.",
+        "interfaces": [
+          "createAuthMiddleware(redis: Redis, logger: Logger): (options?: AuthMiddlewareOptions) => (req: Request, res: Response, next: NextFunction) => Promise<void>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides high-performance, secure authentication and RBAC/MFA enforcement middleware integrated with existing Redis session and token management infrastructures."
+      },
+      "source_code": "import { Request, Response, NextFunction } from 'express';\nimport jwt from 'jsonwebtoken';\nimport { Redis } from 'ioredis';\nimport { Logger } from 'pino';\nimport { TokenPayload, MfaStatus } from '../types';\n\n/**\n * Interface for extended Request object.\n */\ndeclare global {\n  namespace Express {\n    interface Request {\n      user?: TokenPayload;\n      session_id?: string;\n    }\n  }\n}\n\n/**\n * Middleware options for fine-grained route control.\n */\ninterface AuthMiddlewareOptions {\n  mfaRequired?: boolean;\n  requiredRoles?: string[];\n}\n\n/**\n * Redacts PII from logging payloads.\n */\nconst redactPII = (data: Record<string, any>): Record<string, any> => {\n  const sensitiveKeys = ['email', 'password', 'token', 'mfa_secret'];\n  const redacted = { ...data };\n  for (const key in redacted) {\n    if (sensitiveKeys.includes(key)) {\n      redacted[key] = '[REDACTED]';\n    }\n  }\n  return redacted;\n};\n\n/**\n * Creates the authentication middleware factory.\n */\nexport const createAuthMiddleware = (\n  redis: Redis,\n  logger: Logger\n) => {\n  return (options: AuthMiddlewareOptions = {}) => {\n    return async (req: Request, res: Response, next: NextFunction) => {\n      const correlationId = (req.headers['x-correlation-id'] as string) || 'generated-uuid';\n      const authHeader = req.headers.authorization;\n\n      if (!authHeader || !authHeader.startsWith('Bearer ')) {\n        logger.warn({ correlationId, path: req.path }, 'Missing or invalid Authorization header');\n        return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Authentication required' });\n      }\n\n      const token = authHeader.split(' ')[1];\n\n      try {\n        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as TokenPayload;\n\n        // 1. Check Session Validity in Redis\n        const session = await redis.get(`session:${decoded.sid}`);\n        if (!session) {\n          logger.warn({ correlationId, userId: decoded.sub }, 'Session expired or invalid');\n          return res.status(401).json({ code: 'SESSION_EXPIRED', message: 'Session no longer valid' });\n        }\n\n        // 2. MFA Requirement Enforcement\n        if (options.mfaRequired && !decoded.mfa_verified) {\n          const mfaStatus = await redis.get(`mfa:status:${decoded.sub}`);\n          if (mfaStatus !== MfaStatus.VERIFIED) {\n            logger.warn({ correlationId, userId: decoded.sub }, 'MFA verification required for this route');\n            return res.status(403).json({ code: 'MFA_REQUIRED', message: 'MFA verification is required' });\n          }\n        }\n\n        // 3. RBAC/ABAC Scope Check\n        if (options.requiredRoles && options.requiredRoles.length > 0) {\n          const hasRole = options.requiredRoles.every(role => decoded.roles.includes(role));\n          if (!hasRole) {\n            logger.warn({ correlationId, userId: decoded.sub, requiredRoles: options.requiredRoles }, 'Insufficient permissions');\n            return res.status(403).json({ code: 'FORBIDDEN', message: 'You do not have the required permissions' });\n          }\n        }\n\n        // 4. Attach context and proceed\n        req.user = decoded;\n        req.session_id = decoded.sid;\n        next();\n      } catch (error) {\n        if (error instanceof jwt.TokenExpiredError) {\n          logger.warn({ correlationId, error: error.message }, 'Token expired');\n          return res.status(401).json({ code: 'TOKEN_EXPIRED', message: 'Token has expired' });\n        }\n        \n        logger.error({ correlationId, error: redactPII({ err: error }) }, 'Authentication middleware failure');\n        return res.status(500).json({ code: 'INTERNAL_SERVER_ERROR', message: 'Authentication system failure' });\n      }\n    };\n  };\n};",
+      "timestamp": "2026-04-03T23:09:17.113047Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "051CBE4F3DA2A488C398B734E2E3FDEA913A568EE6FDBCBEBACA90F27A4E04AE",
+    "timestamp": 1775257757
+  }
+}

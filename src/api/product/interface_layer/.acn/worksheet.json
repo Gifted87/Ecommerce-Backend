@@ -1,0 +1,31 @@
+{
+  "interface_layer_entry": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "0d28731057e934375b4383c347f89d3d3a0422c53a65664d4c5155106579244e",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Unified API interface layer router for product and inventory services.",
+      "filename": "index.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/api/product/interface_layer/index.ts",
+      "id": "79928adb-817b-4207-8634-2b2190350f06",
+      "provenance_data": {
+        "behaviour": "Initializes and exports a production-ready Express router for product catalog and inventory management, incorporating circuit breakers, request validation, authentication, and observability.",
+        "interfaces": [
+          "productRouter: Express.Router"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a secure, observable, and resilient entry point for catalog and inventory operations in a distributed ecommerce backend."
+      },
+      "source_code": "import { Router, Request, Response, NextFunction } from 'express';\nimport { z } from 'zod';\nimport CircuitBreaker from 'opossum';\nimport pino from 'pino';\n\n// Internal modules assumed to be available per architectural requirement\nimport { \n  getProduct, \n  listProducts, \n  reserveInventory, \n  releaseInventory \n} from './controllers';\nimport { \n  productSchema, \n  inventoryReserveSchema \n} from './schemas';\nimport { \n  authenticate, \n  authorizeRBAC \n} from '../../middleware/auth';\nimport { \n  validateRequest \n} from '../../middleware/validation';\nimport { \n  errorHandler \n} from '../../middleware/error';\nimport { \n  requestIdMiddleware \n} from '../../middleware/observability';\n\nconst logger = pino({ name: 'product-interface-layer' });\n\n// Circuit Breaker Configuration\nconst breakerOptions = {\n  timeout: 3000, \n  errorThresholdPercentage: 50,\n  resetTimeout: 30000 \n};\n\nconst getProductBreaker = new CircuitBreaker(getProduct, breakerOptions);\nconst reserveInventoryBreaker = new CircuitBreaker(reserveInventory, breakerOptions);\n\n/**\n * Product API Interface Layer\n * Central registry for catalog and inventory-related traffic.\n */\nconst productRouter = Router();\n\n// Global Observability: Inject Request ID\nproductRouter.use(requestIdMiddleware);\n\n/**\n * @route GET /products\n * @desc List all products\n */\nproductRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {\n  try {\n    const products = await listProducts();\n    res.status(200).json(products);\n  } catch (error) {\n    next(error);\n  }\n});\n\n/**\n * @route GET /products/:id\n * @desc Get product details\n */\nproductRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {\n  try {\n    const product = await getProductBreaker.fire(req.params.id);\n    res.status(200).json(product);\n  } catch (error) {\n    next(error);\n  }\n});\n\n/**\n * @route POST /inventory/:sku/reserve\n * @desc Reserve inventory for a product\n * @access Protected (RBAC: 'inventory:write')\n */\nproductRouter.post(\n  '/inventory/:sku/reserve',\n  authenticate,\n  authorizeRBAC(['inventory:write']),\n  validateRequest(inventoryReserveSchema),\n  async (req: Request, res: Response, next: NextFunction) => {\n    try {\n      const result = await reserveInventoryBreaker.fire(req.params.sku, req.body);\n      res.status(202).json(result);\n    } catch (error) {\n      next(error);\n    }\n  }\n);\n\n/**\n * @route DELETE /inventory/:sku/reserve\n * @desc Release reserved inventory\n * @access Protected (RBAC: 'inventory:write')\n */\nproductRouter.delete(\n  '/inventory/:sku/reserve',\n  authenticate,\n  authorizeRBAC(['inventory:write']),\n  async (req: Request, res: Response, next: NextFunction) => {\n    try {\n      const result = await releaseInventory(req.params.sku, req.body.reservationId);\n      res.status(200).json(result);\n    } catch (error) {\n      next(error);\n    }\n  }\n);\n\n// Centralized Error Handling\nproductRouter.use(errorHandler);\n\nexport default productRouter;\n",
+      "timestamp": "2026-04-03T23:31:19.548900Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "731F424E23A5867D50DBA552ED1FD74D3BF7708714C5265CF484E4CC5AB6B4A3",
+    "timestamp": 1775259079
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "catalog_service_logic": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "E713481D5DF506E8E24DA9638F2B3F5CD95D4D6FEDA193DD985AF6059D781455",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "CatalogService implementation for high-performance product retrieval using cache-aside pattern.",
+      "filename": "catalog_service.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/services/catalog/catalog_service.ts",
+      "id": "36dc732d-9488-4fc0-b4e3-07b9457eeb49",
+      "provenance_data": {
+        "behaviour": "Implements cache-aside logic for product retrieval, utilizing Redis for caching and PostgreSQL (via ProductRepository) as the source of truth. Integrates Opossum circuit breakers for fault tolerance and Zod for runtime data validation. Implements ADMIN-scoped cache invalidation.",
+        "interfaces": [
+          "getProductBySku(sku: string, transactionId: string): Promise<Product | null>",
+          "invalidateCache(sku: string, userRole: string): Promise<void>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides an efficient, fault-tolerant catalog retrieval service that reduces database load via caching, satisfying the high-concurrency requirement."
+      },
+      "source_code": "import { z } from 'zod';\nimport { Logger } from 'pino';\nimport Opossum from 'opossum';\nimport { ProductRepository } from '../../repository/ProductRepository';\nimport { RedisClient } from '../../../../infrastructure/redis/redis.client';\nimport logger from '../../../../logging/logger';\nimport { Product, ProductSchema } from '../../domain/Product';\n\n/**\n * Domain-specific errors for CatalogService\n */\nexport class CatalogServiceError extends Error {\n  constructor(public message: string, public code: string, public originalError?: Error) {\n    super(message);\n    this.name = 'CatalogServiceError';\n  }\n}\n\n/**\n * CatalogService manages product information retrieval using a cache-aside pattern.\n * It coordinates between PostgreSQL via ProductRepository and Redis for high-performance access.\n */\nexport class CatalogService {\n  private static instance: CatalogService;\n  private readonly repository: ProductRepository;\n  private readonly cache: RedisClient;\n  private readonly log: Logger;\n  private readonly CACHE_TTL = 3600;\n\n  private readonly getProductBreaker: Opossum<[string], Product | null>;\n\n  private constructor() {\n    this.repository = ProductRepository.getInstance();\n    this.cache = RedisClient.getInstance();\n    this.log = logger.child({ module: 'CatalogService' });\n\n    // Circuit breaker configuration\n    const breakerOptions = {\n      timeout: 3000,\n      errorThresholdPercentage: 50,\n      resetTimeout: 30000,\n    };\n\n    this.getProductBreaker = new Opossum(this.executeGetProduct.bind(this), breakerOptions);\n    this.getProductBreaker.on('open', () => this.log.error('CatalogService: Circuit breaker opened.'));\n    this.getProductBreaker.on('halfOpen', () => this.log.info('CatalogService: Circuit breaker half-open.'));\n    this.getProductBreaker.on('close', () => this.log.info('CatalogService: Circuit breaker closed.'));\n  }\n\n  public static getInstance(): CatalogService {\n    if (!CatalogService.instance) {\n      CatalogService.instance = new CatalogService();\n    }\n    return CatalogService.instance;\n  }\n\n  /**\n   * Retrieves a product by SKU using cache-aside pattern.\n   * Validates integrity using Zod schemas.\n   * @param sku The product SKU.\n   * @param transactionId Unique ID for tracing.\n   */\n  public async getProductBySku(sku: string, transactionId: string): Promise<Product | null> {\n    const start = Date.now();\n    this.log.info({ sku, transactionId, operation: 'getProductBySku' }, 'Initiating product fetch');\n\n    try {\n      return await this.getProductBreaker.fire(sku);\n    } catch (err) {\n      this.log.error({ err, sku, transactionId }, 'Failed to retrieve product');\n      throw new CatalogServiceError(`Failed to fetch product: ${sku}`, 'FETCH_FAILED', err as Error);\n    } finally {\n      this.log.debug({ duration: Date.now() - start, sku, transactionId }, 'Operation completed');\n    }\n  }\n\n  private async executeGetProduct(sku: string): Promise<Product | null> {\n    // 1. Try Cache\n    try {\n      const cached = await this.cache.get<unknown>(`product:${sku}`);\n      if (cached) {\n        const validated = ProductSchema.safeParse(cached);\n        if (validated.success) {\n          this.log.info({ sku }, 'Cache hit');\n          return validated.data;\n        }\n        this.log.warn({ sku }, 'Cache data corruption detected. Invalidate and re-fetch.');\n        await this.cache.del(`product:${sku}`);\n      }\n    } catch (err) {\n      this.log.error({ err, sku }, 'Cache access failed, proceeding to DB');\n    }\n\n    // 2. Try DB\n    const product = await this.repository.getBySku(sku);\n    if (!product) {\n      return null;\n    }\n\n    // 3. Populate Cache (async fire-and-forget)\n    this.cache.set(`product:${sku}`, product, this.CACHE_TTL).catch((err) =>\n      this.log.error({ err, sku }, 'Failed to update cache after miss')\n    );\n\n    return product;\n  }\n\n  /**\n   * Invalidates product cache. Requires ADMIN scope.\n   */\n  public async invalidateCache(sku: string, userRole: string): Promise<void> {\n    if (userRole !== 'ADMIN') {\n      throw new CatalogServiceError('Unauthorized access', 'FORBIDDEN');\n    }\n    await this.cache.del(`product:${sku}`);\n    this.log.info({ sku }, 'Cache invalidated by admin');\n  }\n}\n",
+      "timestamp": "2026-04-03T23:09:14.957958Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "0F7FE0514B362F6DC0608EAC1650EB64F071EB10B0222B092A8A8E131C5C510E",
+    "timestamp": 1775257754
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "shared_cache": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "7D181E15F297FC7889597E72E88FB1170DD0A6564EC32E4A55B6CE377E42E3F0",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implemented a production-ready Redis client wrapper using 'ioredis' and 'opossum' for caching and session management.",
+      "filename": "redisClient.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/shared/cache/redisClient.ts",
+      "id": "a638d430-7e13-429f-8b96-6a31cd83df35",
+      "provenance_data": {
+        "behaviour": "Provides a singleton Redis client wrapper with connection pooling, automatic JSON serialization/deserialization, fault tolerance via Opossum circuit breaker, and health check capabilities.",
+        "interfaces": [
+          "RedisClient.getInstance(): RedisClient",
+          "RedisClient.get<T>(key: string): Promise<T | null>",
+          "RedisClient.set(key: string, value: any, ttlSeconds?: number): Promise<void>",
+          "RedisClient.del(key: string): Promise<void>",
+          "RedisClient.hset(key: string, field: string, value: any): Promise<void>",
+          "RedisClient.hget<T>(key: string, field: string): Promise<T | null>",
+          "RedisClient.pipeline(): ChainableCommander",
+          "RedisClient.getHealth(): Promise<RedisHealthStatus>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a robust, fault-tolerant Redis interface for the ecommerce backend, essential for session management and performance caching."
+      },
+      "source_code": "import Redis, { RedisOptions, ChainableCommander } from 'ioredis';\nimport Opossum from 'opossum';\n\n/**\n * Custom error class for Redis operations\n */\nexport class RedisCacheError extends Error {\n  constructor(public message: string, public code: string, public originalError?: Error) {\n    super(message);\n    this.name = 'RedisCacheError';\n  }\n}\n\n/**\n * Interface for health status\n */\nexport interface RedisHealthStatus {\n  status: 'connected' | 'reconnecting' | 'disconnected' | 'open';\n  latency: number;\n}\n\n/**\n * Production-ready Redis client wrapper providing abstraction for caching operations.\n * Implements singleton pattern for connection efficiency and Opossum for fault tolerance.\n */\nexport class RedisClient {\n  private static instance: RedisClient;\n  private client: Redis;\n  private breaker: Opossum;\n\n  private constructor() {\n    const options: RedisOptions = {\n      host: process.env.REDIS_HOST || '127.0.0.1',\n      port: parseInt(process.env.REDIS_PORT || '6379', 10),\n      password: process.env.REDIS_PASSWORD || undefined,\n      tls: process.env.REDIS_USE_TLS === 'true' ? {} : undefined,\n      retryStrategy: (times: number) => {\n        const delay = Math.min(times * 50, 2000);\n        return delay;\n      },\n    };\n\n    this.client = new Redis(options);\n\n    this.client.on('connect', () => console.info('Redis client connecting...'));\n    this.client.on('ready', () => console.info('Redis client ready.'));\n    this.client.on('error', (err) => console.error('Redis client error:', err));\n    this.client.on('close', () => console.warn('Redis connection closed.'));\n\n    // Circuit Breaker configuration\n    this.breaker = new Opossum(async (command: string, ...args: any[]) => {\n      return (this.client as any)[command](...args);\n    }, {\n      timeout: 3000,\n      errorThresholdPercentage: 50,\n      resetTimeout: 30000,\n    });\n  }\n\n  public static getInstance(): RedisClient {\n    if (!RedisClient.instance) {\n      RedisClient.instance = new RedisClient();\n    }\n    return RedisClient.instance;\n  }\n\n  /**\n   * Retrieves a value from cache and parses JSON.\n   */\n  public async get<T>(key: string): Promise<T | null> {\n    try {\n      const data = await this.breaker.fire('get', key);\n      return data ? JSON.parse(data as string) : null;\n    } catch (err) {\n      throw new RedisCacheError(`Failed to get key: ${key}`, 'GET_ERROR', err as Error);\n    }\n  }\n\n  /**\n   * Sets a value in cache with optional TTL (in seconds).\n   */\n  public async set(key: string, value: any, ttlSeconds?: number): Promise<void> {\n    try {\n      const serialized = JSON.stringify(value);\n      if (ttlSeconds) {\n        await this.breaker.fire('set', key, serialized, 'EX', ttlSeconds);\n      } else {\n        await this.breaker.fire('set', key, serialized);\n      }\n    } catch (err) {\n      throw new RedisCacheError(`Failed to set key: ${key}`, 'SET_ERROR', err as Error);\n    }\n  }\n\n  /**\n   * Deletes a key from cache.\n   */\n  public async del(key: string): Promise<void> {\n    try {\n      await this.breaker.fire('del', key);\n    } catch (err) {\n      throw new RedisCacheError(`Failed to delete key: ${key}`, 'DEL_ERROR', err as Error);\n    }\n  }\n\n  /**\n   * Hash set operation.\n   */\n  public async hset(key: string, field: string, value: any): Promise<void> {\n    try {\n      await this.breaker.fire('hset', key, field, JSON.stringify(value));\n    } catch (err) {\n      throw new RedisCacheError(`Failed to hset key: ${key}`, 'HSET_ERROR', err as Error);\n    }\n  }\n\n  /**\n   * Hash get operation.\n   */\n  public async hget<T>(key: string, field: string): Promise<T | null> {\n    try {\n      const data = await this.breaker.fire('hget', key, field);\n      return data ? JSON.parse(data as string) : null;\n    } catch (err) {\n      throw new RedisCacheError(`Failed to hget key: ${key}`, 'HGET_ERROR', err as Error);\n    }\n  }\n\n  /**\n   * Returns a pipeline instance for batching commands.\n   */\n  public pipeline(): ChainableCommander {\n    return this.client.pipeline();\n  }\n\n  /**\n   * Provides health status for observability.\n   */\n  public async getHealth(): Promise<RedisHealthStatus> {\n    const start = Date.now();\n    try {\n      await this.client.ping();\n      return {\n        status: this.breaker.opened ? 'open' : 'connected',\n        latency: Date.now() - start,\n      };\n    } catch {\n      return {\n        status: 'disconnected',\n        latency: -1,\n      };\n    }\n  }\n}\n",
+      "timestamp": "2026-04-03T22:49:55.340718Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "D02A2975E8C32012AD667F04F2BED0E507A41218C4C025B0C06CA809D261B6A6",
+    "timestamp": 1775256595
+  }
+}

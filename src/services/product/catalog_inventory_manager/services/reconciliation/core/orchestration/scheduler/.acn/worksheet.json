@@ -1,0 +1,34 @@
+{
+  "scheduler_module": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "e81d7729e2f4702167d5e49226500171a82f3a479d2574e0d481f185d1c3e1b7",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implements a production-ready BackgroundScheduler for managing automated reconciliation cycles with robust error handling and concurrency control.",
+      "filename": "BackgroundScheduler.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/services/reconciliation/core/orchestration/scheduler/BackgroundScheduler.ts",
+      "id": "e248512c-05b9-4dcc-8294-82f91abfd901",
+      "provenance_data": {
+        "behaviour": "The BackgroundScheduler orchestrates the reconciliation process, managing a continuous execution loop with jittered frequency, distributed locking for concurrency control, and exponential backoff for task execution. It interacts with Redis for locking and executes reconciliation tasks via a provided executor.",
+        "interfaces": [
+          "start(): void",
+          "stop(): void",
+          "performReconciliationCycle(skuRange: string): Promise<void>",
+          "executeWithRetry(skuRange: string): Promise<void>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides a robust scheduling mechanism for background inventory reconciliation, ensuring fault tolerance via retries and concurrency control via distributed locking."
+      },
+      "source_code": "import { Logger } from 'pino';\nimport Redis from 'ioredis';\nimport { EventEmitter } from 'events';\nimport { setTimeout } from 'timers/promises';\n\n/**\n * Interface for the reconciliation task executor.\n */\nexport interface IReconciliationTask {\n  execute(skuRange: string): Promise<void>;\n}\n\n/**\n * Configuration for the Background Scheduler.\n */\nexport interface SchedulerConfig {\n  reconciliationFrequencyMs: number;\n  maxRetryAttempts: number;\n  baseDelayMs: number;\n}\n\n/**\n * BackgroundScheduler orchestrates the reconciliation lifecycle.\n * It manages execution cycles, handles distributed locking, and implements exponential backoff.\n */\nexport class BackgroundScheduler extends EventEmitter {\n  private isRunning: boolean = false;\n  private readonly config: SchedulerConfig;\n\n  constructor(\n    private readonly taskExecutor: IReconciliationTask,\n    private readonly redis: Redis,\n    private readonly logger: Logger,\n    config: Partial<SchedulerConfig> = {}\n  ) {\n    super();\n    this.config = {\n      reconciliationFrequencyMs: config.reconciliationFrequencyMs || 60000,\n      maxRetryAttempts: config.maxRetryAttempts || 5,\n      baseDelayMs: config.baseDelayMs || 1000,\n    };\n  }\n\n  /**\n   * Starts the scheduler loop.\n   */\n  public start(): void {\n    if (this.isRunning) return;\n    this.isRunning = true;\n    this.logger.info('BackgroundScheduler starting reconciliation loop.');\n    this.runLoop().catch((err) => {\n      this.logger.error({ err }, 'BackgroundScheduler loop terminated unexpectedly.');\n    });\n  }\n\n  /**\n   * Stops the scheduler loop.\n   */\n  public stop(): void {\n    this.isRunning = false;\n    this.logger.info('BackgroundScheduler stopped.');\n  }\n\n  private async runLoop(): Promise<void> {\n    while (this.isRunning) {\n      const startTime = Date.now();\n      \n      try {\n        // Simple partitioning strategy based on SKU ranges\n        // In a production environment, this would dynamically fetch active ranges\n        await this.performReconciliationCycle('default-range');\n      } catch (err) {\n        this.logger.error({ err }, 'Critical failure in reconciliation cycle.');\n      }\n\n      const duration = Date.now() - startTime;\n      const jitter = Math.random() * 5000;\n      const delay = Math.max(0, this.config.reconciliationFrequencyMs - duration) + jitter;\n      \n      await setTimeout(delay);\n    }\n  }\n\n  private async performReconciliationCycle(skuRange: string): Promise<void> {\n    const lockKey = `recon:lock:${skuRange}`;\n    const requestId = Math.random().toString(36).substring(7);\n    \n    // Acquire lock with TTL\n    const acquired = await this.redis.set(lockKey, requestId, 'EX', 30, 'NX');\n    if (!acquired) {\n      this.logger.debug({ skuRange }, 'Could not acquire lock, skipping cycle.');\n      return;\n    }\n\n    try {\n      this.logger.info({ skuRange }, 'Starting reconciliation cycle.');\n      await this.executeWithRetry(skuRange);\n      this.logger.info({ skuRange }, 'Reconciliation cycle completed successfully.');\n    } catch (err) {\n      this.logger.error({ skuRange, err }, 'Reconciliation cycle failed.');\n    } finally {\n      // Release lock safely\n      const script = `\n        if redis.call(\"get\", KEYS[1]) == ARGV[1] then\n          return redis.call(\"del\", KEYS[1])\n        else\n          return 0\n        end\n      `;\n      await this.redis.eval(script, 1, lockKey, requestId);\n    }\n  }\n\n  private async executeWithRetry(skuRange: string): Promise<void> {\n    let attempt = 0;\n    \n    while (attempt < this.config.maxRetryAttempts) {\n      try {\n        await this.taskExecutor.execute(skuRange);\n        return;\n      } catch (err) {\n        attempt++;\n        if (attempt >= this.config.maxRetryAttempts) {\n          this.logger.error({ skuRange, attempt, err }, 'Max retries reached for reconciliation task.');\n          throw err;\n        }\n\n        const backoff = this.config.baseDelayMs * Math.pow(2, attempt) + (Math.random() * 1000);\n        this.logger.warn({ skuRange, attempt, backoff }, 'Retrying reconciliation task.');\n        await setTimeout(backoff);\n      }\n    }\n  }\n}\n",
+      "timestamp": "2026-04-03T23:13:44.029924Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "D85825736DBAE811D50F8357665D84FF1F412A1FD088E586C466DE113C3D800A",
+    "timestamp": 1775258024
+  }
+}

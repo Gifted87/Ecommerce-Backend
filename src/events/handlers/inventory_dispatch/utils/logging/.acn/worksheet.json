@@ -1,0 +1,32 @@
+{
+  "inventory_dispatch_logging_service": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "A3BEE8DBCE3C20D642544C7F40EE815CF5480C1EC02FC3A0D5490E31EDA0EAA7",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "A centralized, production-ready logging module implemented with Pino for the inventory dispatch service.",
+      "filename": "index.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/events/handlers/inventory_dispatch/utils/logging/index.ts",
+      "id": "2457a6c8-fed0-4d8a-bcb2-eebe6b08ac13",
+      "provenance_data": {
+        "behaviour": "Provides structured, asynchronous JSON logging for the inventory dispatch service, featuring automated PII redaction and hierarchical context injection for improved observability.",
+        "interfaces": [
+          "export interface LogContext { module: string; requestId?: string; correlationId?: string; sku?: string; batchProcessId?: string; [key: string]: any; }",
+          "export const createLogger = (context: LogContext): Logger => {}"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Ensures production-grade observability and PII security compliance across the inventory dispatch event-processing lifecycle."
+      },
+      "source_code": "import pino, { Logger, LoggerOptions } from 'pino';\nimport os from 'os';\n\n/**\n * @fileoverview Inventory Logging Service\n * \n * Provides a high-performance, asynchronous, structured JSON logging solution\n * for the Inventory Dispatcher. Implements PII redaction, process metadata\n * injection, and hierarchical context support for observability.\n */\n\n/**\n * List of sensitive keys that must be redacted from all log streams\n * to ensure compliance with PII/security requirements.\n */\nconst REDACTED_KEYS = [\n  'password',\n  'credit_card',\n  'authorization',\n  'token',\n  'cookie',\n  'set-cookie',\n  'secret',\n  'access_token',\n  'refresh_token',\n  'cvv'\n];\n\n/**\n * Pino configuration with production-ready defaults.\n * Configured for non-blocking, asynchronous JSON output.\n */\nconst loggerOptions: LoggerOptions = {\n  level: process.env.LOG_LEVEL || 'info',\n  redact: {\n    paths: REDACTED_KEYS,\n    censor: '[REDACTED]'\n  },\n  formatters: {\n    level: (label: string) => ({ level: label }),\n  },\n  timestamp: pino.stdTimeFunctions.isoTime,\n  base: {\n    pid: process.pid,\n    hostname: os.hostname(),\n    service: 'inventory-dispatch-service'\n  },\n  errorKey: 'error',\n  serializers: {\n    error: pino.stdSerializers.err,\n  },\n};\n\n/**\n * Root logger instance singleton.\n */\nconst rootLogger: Logger = pino(loggerOptions);\n\n/**\n * Interface defining the mandatory and optional metadata for logs.\n * All logs must include a 'module' context for granular filtering.\n */\nexport interface LogContext {\n  module: string;\n  requestId?: string;\n  correlationId?: string;\n  sku?: string;\n  batchProcessId?: string;\n  [key: string]: any;\n}\n\n/**\n * Creates a child logger with injected hierarchical context.\n * Useful for distributed tracing and module-level debugging across\n * the inventory pipeline.\n *\n * @param context - The metadata object containing 'module' and additional context keys.\n * @returns A pino logger instance containing the injected context.\n * @throws Error if context.module is missing.\n */\nexport const createLogger = (context: LogContext): Logger => {\n  if (!context || typeof context.module !== 'string') {\n    throw new Error('Logger context must include a \"module\" property for structured traceability.');\n  }\n  return rootLogger.child(context);\n};\n\n/**\n * Default logger instance for global usage across the inventory service.\n */\nconst logger: Logger = rootLogger.child({ module: 'global' });\n\nexport default logger;\n",
+      "timestamp": "2026-04-03T23:38:55.036213Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "CAFEF2D93AD660E65AB7527E7488BE8A3A171392A1ED9B3453ACFCC1668B3068",
+    "timestamp": 1775259535
+  }
+}

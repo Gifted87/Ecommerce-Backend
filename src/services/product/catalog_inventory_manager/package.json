@@ -1,0 +1,40 @@
+{
+  "name": "@acn/catalog-inventory-manager",
+  "version": "1.0.0",
+  "description": "Production-ready Product Catalog and Inventory Management Service",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "jest",
+    "lint": "eslint 'src/**/*.ts'",
+    "migrate": "knex migrate:latest",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "16.4.5",
+    "ioredis": "5.4.1",
+    "kafkajs": "2.2.4",
+    "knex": "3.1.0",
+    "opossum": "8.3.1",
+    "pg": "8.12.0",
+    "pino": "9.3.2",
+    "pino-pretty": "11.2.2",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@types/jest": "29.5.12",
+    "@types/node": "20.14.10",
+    "@typescript-eslint/eslint-plugin": "7.14.1",
+    "@typescript-eslint/parser": "7.14.1",
+    "eslint": "8.57.0",
+    "jest": "29.7.0",
+    "ts-jest": "29.1.5",
+    "typescript": "5.5.3"
+  },
+  "author": "ACN Actuator",
+  "license": "UNLICENSED"
+}

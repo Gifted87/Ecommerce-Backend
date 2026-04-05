@@ -1,0 +1,33 @@
+{
+  "inventory_dispatch_security_utils": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "7e1d5a7b6c59d8e4f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Security utility module implementing HMAC-SHA256 signing/verification and PII scrubbing.",
+      "filename": "security.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/events/handlers/inventory_dispatch/utils/security/security.ts",
+      "id": "97e60b48-fc09-48d4-815e-db11273f8736",
+      "provenance_data": {
+        "behaviour": "Provides cryptographic integrity verification (HMAC-SHA256) and data privacy scrubbing for event payloads. It enforces deterministic canonicalization for signing and constant-time comparison for verification to mitigate timing attacks.",
+        "interfaces": [
+          "redactPII(obj: any): any",
+          "signMessage(payload: any): string",
+          "verifySignature(payload: any, signature: string): void"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides production-grade message integrity verification and PII scrubbing utilities for event-driven architectures."
+      },
+      "source_code": "import crypto from 'crypto';\n\n/**\n * Custom error class for security validation failures.\n */\nexport class SecurityValidationError extends Error {\n  constructor(message: string) {\n    super(message);\n    this.name = 'SecurityValidationError';\n  }\n}\n\n/**\n * Sensitive fields to be redacted during PII scrubbing.\n */\nconst SENSITIVE_FIELDS = new Set(['email', 'userId', 'user_id', 'ssn', 'phone_number']);\n\n/**\n * Recursively redacts PII from an object based on a defined set of sensitive keys.\n * \n * @param obj - The object to scrub.\n * @returns The scrubbed object.\n */\nexport function redactPII(obj: any): any {\n  if (obj === null || typeof obj !== 'object') {\n    return obj;\n  }\n\n  if (Array.isArray(obj)) {\n    return obj.map(redactPII);\n  }\n\n  const result: Record<string, any> = {};\n  for (const key in obj) {\n    if (Object.prototype.hasOwnProperty.call(obj, key)) {\n      if (SENSITIVE_FIELDS.has(key)) {\n        result[key] = '[REDACTED]';\n      } else {\n        result[key] = redactPII(obj[key]);\n      }\n    }\n  }\n  return result;\n}\n\n/**\n * Canonicalizes an object for deterministic signature generation.\n * Sorts keys recursively.\n * \n * @param obj - The object to canonicalize.\n * @returns A string representation of the object.\n */\nfunction canonicalize(obj: any): string {\n  if (obj === null || typeof obj !== 'object') {\n    return JSON.stringify(obj);\n  }\n  if (Array.isArray(obj)) {\n    return JSON.stringify(obj.map(canonicalize));\n  }\n  const sortedKeys = Object.keys(obj).sort();\n  const sortedObj: Record<string, any> = {};\n  for (const key of sortedKeys) {\n    sortedObj[key] = canonicalize(obj[key]);\n  }\n  return JSON.stringify(sortedObj);\n}\n\n/**\n * Generates an HMAC-SHA256 hexadecimal string for a given payload.\n * \n * @param payload - The object or string payload to sign.\n * @returns HMAC-SHA256 hex string.\n * @throws SecurityValidationError if HMAC_SECRET is not configured.\n */\nexport function signMessage(payload: any): string {\n  const secret = process.env.HMAC_SECRET;\n  if (!secret) {\n    throw new SecurityValidationError('HMAC_SECRET environment variable not set');\n  }\n\n  const data = typeof payload === 'string' ? payload : canonicalize(payload);\n  const hmac = crypto.createHmac('sha256', secret);\n  hmac.update(data);\n  return hmac.digest('hex');\n}\n\n/**\n * Verifies an HMAC-SHA256 signature against a payload using constant-time comparison.\n * \n * @param payload - The payload to verify.\n * @param signature - The signature to verify against.\n * @throws SecurityValidationError if signature mismatch is detected.\n */\nexport function verifySignature(payload: any, signature: string): void {\n  const secret = process.env.HMAC_SECRET;\n  if (!secret) {\n    throw new SecurityValidationError('HMAC_SECRET environment variable not set');\n  }\n\n  const expectedSignature = signMessage(payload);\n  \n  const expectedBuffer = Buffer.from(expectedSignature, 'hex');\n  const providedBuffer = Buffer.from(signature, 'hex');\n\n  if (expectedBuffer.length !== providedBuffer.length || !crypto.timingSafeEqual(expectedBuffer, providedBuffer)) {\n    throw new SecurityValidationError('Signature mismatch: potential tampering detected');\n  }\n}\n",
+      "timestamp": "2026-04-03T23:38:55.033680Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "D45065E6B09FE8C5D72A81EB984D060516E6042985DCAF31793D8798FAE75977",
+    "timestamp": 1775259535
+  }
+}

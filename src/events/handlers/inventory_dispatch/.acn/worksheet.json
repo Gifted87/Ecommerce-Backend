@@ -1,0 +1,33 @@
+{
+  "inventory_dispatch_bootstrap_main": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "8248c084196191c0e3a5103a89079f9723522f60408544c0291999201f81d4a0",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implemented the InventoryEventDispatcher class for secure, resilient, and idempotent event propagation to Kafka.",
+      "filename": "index.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/events/handlers/inventory_dispatch/index.ts",
+      "id": "fdd4a70e-e111-4f0d-89fe-2ed6744dfb37",
+      "provenance_data": {
+        "behaviour": "Provides a robust, circuit-breaker protected, and cryptographically signed mechanism for dispatching inventory events to Kafka with support for graceful shutdown.",
+        "interfaces": [
+          "connect(): Promise<void>",
+          "dispatch(event: InventoryEvent): Promise<void>",
+          "shutdown(): Promise<void>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Enables reliable and secure asynchronous event communication for inventory changes."
+      },
+      "source_code": "import { Kafka, Producer, ProducerRecord } from 'kafkajs';\nimport { z } from 'zod';\nimport { Logger } from 'pino';\nimport * as crypto from 'crypto';\nimport CircuitBreaker from 'opossum';\n\n/**\n * Interface for components that support graceful shutdown.\n */\nexport interface GracefulShutdownComponent {\n  name: string;\n  shutdown: () => Promise<void>;\n}\n\n/**\n * Inventory Event Types\n */\nexport enum InventoryEventType {\n  Reserved = 'RESERVED',\n  Released = 'RELEASED',\n  StockAdjusted = 'STOCK_ADJUSTED',\n}\n\n/**\n * Zod schema for Inventory events.\n */\nexport const InventoryEventSchema = z.object({\n  type: z.nativeEnum(InventoryEventType),\n  productId: z.string().uuid(),\n  quantity: z.number().int(),\n  timestamp: z.string().datetime(),\n  correlationId: z.string().uuid(),\n});\n\nexport type InventoryEvent = z.infer<typeof InventoryEventSchema>;\n\n/**\n * InventoryEventDispatcher orchestrates the reliable, secure, and resilient dispatch\n * of inventory events to Kafka.\n */\nexport class InventoryEventDispatcher implements GracefulShutdownComponent {\n  public readonly name = 'InventoryEventDispatcher';\n  private readonly producer: Producer;\n  private readonly breaker: CircuitBreaker;\n  private readonly hmacSecret: string;\n\n  constructor(\n    private readonly kafka: Kafka,\n    private readonly logger: Logger,\n    hmacSecret?: string\n  ) {\n    this.hmacSecret = hmacSecret || process.env.HMAC_SECRET || 'fallback-secret-for-dev-only';\n    this.producer = this.kafka.producer({\n      idempotent: true,\n      maxInFlightRequests: 1,\n      retry: {\n        initialRetryTime: 100,\n        retries: 5,\n      },\n    });\n\n    // Circuit Breaker configuration per requirement\n    const breakerOptions = {\n      timeout: 3000,\n      errorThresholdPercentage: 50,\n      resetTimeout: 30000,\n    };\n\n    this.breaker = new CircuitBreaker(this.sendToKafka.bind(this), breakerOptions);\n\n    this.breaker.on('open', () => this.logger.error({ module: this.name }, 'Circuit breaker opened'));\n    this.breaker.on('halfOpen', () => this.logger.warn({ module: this.name }, 'Circuit breaker half-open'));\n    this.breaker.on('close', () => this.logger.info({ module: this.name }, 'Circuit breaker closed'));\n  }\n\n  /**\n   * Initializes the Kafka producer connection.\n   */\n  public async connect(): Promise<void> {\n    await this.producer.connect();\n    this.logger.info({ module: this.name }, 'Kafka producer connected');\n  }\n\n  /**\n   * Dispatches an inventory event after validation and signing.\n   */\n  public async dispatch(event: InventoryEvent): Promise<void> {\n    const validation = InventoryEventSchema.safeParse(event);\n    if (!validation.success) {\n      this.logger.error({ module: this.name, error: validation.error }, 'Invalid event schema');\n      throw new Error('Schema validation failed');\n    }\n\n    try {\n      await this.breaker.fire(validation.data);\n    } catch (error) {\n      this.logger.error({ module: this.name, error, correlationId: event.correlationId }, 'Failed to dispatch event');\n      throw error;\n    }\n  }\n\n  /**\n   * Performs the actual Kafka production logic.\n   */\n  private async sendToKafka(event: InventoryEvent): Promise<void> {\n    const payload = JSON.stringify(event);\n    const signature = crypto\n      .createHmac('sha256', this.hmacSecret)\n      .update(payload)\n      .digest('hex');\n\n    const record: ProducerRecord = {\n      topic: 'inventory-events',\n      messages: [\n        {\n          value: payload,\n          headers: {\n            'x-signature': signature,\n            'x-correlation-id': event.correlationId,\n          },\n        },\n      ],\n      acks: -1, // Wait for all replicas\n    };\n\n    await this.producer.send(record);\n    this.logger.info({ \n      module: this.name, \n      correlationId: event.correlationId,\n      eventType: event.type \n    }, 'Event dispatched successfully');\n  }\n\n  /**\n   * Graceful shutdown of the dispatcher.\n   */\n  public async shutdown(): Promise<void> {\n    this.logger.info({ module: this.name }, 'Shutting down producer...');\n    await this.producer.disconnect();\n    this.logger.info({ module: this.name }, 'Producer disconnected successfully');\n  }\n}\n",
+      "timestamp": "2026-04-03T23:42:03.475000Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "714B72FEFE0BAB562FC9137AD893928871A319134F6E118AC2878A061133E6B5",
+    "timestamp": 1775259723
+  }
+}

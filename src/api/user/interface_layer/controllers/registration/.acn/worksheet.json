@@ -1,0 +1,32 @@
+{
+  "registration_logic": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "3e18dbed8f7830293045500eb146b8c5fe2ae0e1fcc2b04612d4dd31beeb3f96",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of the RegistrationController class for secure user sign-up.",
+      "filename": "registration.controller.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/api/user/interface_layer/controllers/registration/registration.controller.ts",
+      "id": "ec2832a8-ab6b-4488-a2ac-4ff4d24c6c16",
+      "provenance_data": {
+        "behaviour": "Provides a secure HTTP controller for user registration, enforcing schema validation, correlation ID tracing, and error handling. It delegates business logic to a service layer and provides appropriate HTTP response codes (201, 400, 409, 500).",
+        "interfaces": [
+          "register(req: Request, res: Response): Promise<void>",
+          "handleError(res: Response, error: any, correlationId: string): void"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Handles incoming user registration HTTP requests, ensuring secure validation and structured logging before service delegation."
+      },
+      "source_code": "import { Request, Response } from 'express';\nimport { Logger } from 'pino';\nimport { v4 as uuidv4 } from 'uuid';\nimport { UserRegistrationSchema } from '../../../domain/user.schema';\nimport { UserRegistrationService } from '../../../application/services/user-registration.service';\n\n/**\n * @fileoverview RegistrationController handles user sign-up requests.\n * It enforces strict schema validation, correlation ID propagation, \n * and delegates business logic to the UserRegistrationService.\n */\n\n/**\n * @class RegistrationController\n * @description Provides HTTP handlers for the registration lifecycle.\n * Stateless and designed for high-concurrency environments.\n */\nexport class RegistrationController {\n  /**\n   * @param registrationService - The service responsible for user creation logic.\n   * @param logger - The logger instance for structured output.\n   */\n  constructor(\n    private readonly registrationService: UserRegistrationService,\n    private readonly logger: Logger\n  ) {}\n\n  /**\n   * Handles user registration via POST /register.\n   * \n   * @param req - Express Request object containing user registration details.\n   * @param res - Express Response object.\n   * @returns Promise<void>\n   */\n  async register(req: Request, res: Response): Promise<void> {\n    const correlationId = (req.headers['x-correlation-id'] as string) || uuidv4();\n    \n    this.logger.info({ \n      correlationId, \n      event: 'REGISTRATION_REQUEST_RECEIVED', \n      path: req.path,\n      method: req.method \n    });\n\n    try {\n      // 1. Schema Validation\n      const validationResult = UserRegistrationSchema.safeParse(req.body);\n      \n      if (!validationResult.success) {\n        this.logger.warn({ \n          correlationId, \n          event: 'REGISTRATION_VALIDATION_FAILED', \n          errors: validationResult.error.format() \n        });\n        \n        res.status(400).json({ \n          message: 'Invalid registration data', \n          errors: validationResult.error.format() \n        });\n        return;\n      }\n\n      // 2. Service Coordination\n      this.logger.info({ correlationId, event: 'REGISTRATION_PROCESS_STARTED' });\n      \n      await this.registrationService.registerUser(validationResult.data);\n\n      this.logger.info({ correlationId, event: 'REGISTRATION_SUCCESS' });\n      \n      res.status(201).json({ \n        message: 'User registered successfully' \n      });\n\n    } catch (error: any) {\n      this.handleError(res, error, correlationId);\n    }\n  }\n\n  /**\n   * Centralized error handling strategy.\n   * Distinguishes between known domain exceptions and internal system failures.\n   * \n   * @param res - Express Response object.\n   * @param error - The caught error.\n   * @param correlationId - The tracing ID for debugging.\n   */\n  private handleError(res: Response, error: any, correlationId: string): void {\n    // Redact sensitive info before logging\n    this.logger.error({ \n      correlationId, \n      event: 'REGISTRATION_INTERNAL_ERROR', \n      message: error.message,\n      stack: error.stack \n    });\n\n    // Check if error is a known conflict (e.g., email or username taken)\n    if (error.code === 'USER_EXISTS' || error.message.includes('already exists')) {\n      res.status(409).json({ \n        message: 'Registration conflict', \n        reason: error.message \n      });\n      return;\n    }\n\n    // Default 500\n    res.status(500).json({ \n      message: 'An unexpected error occurred during registration',\n      correlationId \n    });\n  }\n}\n",
+      "timestamp": "2026-04-03T23:30:16.804429Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "F824FE83895AEE9FE60F53EB6E1B865A14B92CC069CFBA00C6E2DFBBCC4A8F7A",
+    "timestamp": 1775259016
+  }
+}

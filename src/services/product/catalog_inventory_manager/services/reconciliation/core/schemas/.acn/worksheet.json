@@ -1,0 +1,35 @@
+{
+  "schema_module": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "d41d8cd98f00b204e9800998ecf8427e",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Implementation of comprehensive Zod validation schemas for the Inventory Reconciliation service.",
+      "filename": "index.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/product/catalog_inventory_manager/services/reconciliation/core/schemas/index.ts",
+      "id": "a63a8c3f-444a-467e-aa79-03d3f0525d2e",
+      "provenance_data": {
+        "behaviour": "Defines rigid data contracts for Kafka events, PostgreSQL inventory snapshots, and reconciliation audit trails using Zod to ensure type-safety, input validation, and business invariant enforcement (e.g., total_stock >= reserved_stock).",
+        "interfaces": [
+          "validateInventoryReserved(data: unknown): z.SafeParseReturnType<any, InventoryReserved>",
+          "validateStockAdjusted(data: unknown): z.SafeParseReturnType<any, StockAdjusted>",
+          "validateStockReconciled(data: unknown): z.SafeParseReturnType<any, StockReconciled>",
+          "validateInventorySnapshot(data: unknown): z.SafeParseReturnType<any, InventorySnapshot>",
+          "validateReconciliationRecord(data: unknown): z.SafeParseReturnType<any, ReconciliationRecord>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Provides the source of truth for data validation, ensuring that all inventory-related operations adhere to strict schema constraints before processing."
+      },
+      "source_code": "import { z } from 'zod';\n\n/**\n * @fileoverview Exhaustive Zod schemas for the Inventory Reconciliation service.\n * Enforces strict data contracts for Kafka events, PostgreSQL snapshots, and audit records.\n * Maintains system integrity through rigorous validation and refinement logic.\n */\n\nconst SKU_REGEX = /^[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+$/;\nconst IDEMPOTENCY_KEY_REGEX = /^[a-zA-Z0-9-]{36}$/;\n\n/**\n * Common Header for Kafka Events\n */\nconst KafkaHeaderSchema = z.object({\n  idempotencyKey: z.string().regex(IDEMPOTENCY_KEY_REGEX, 'Invalid idempotency key format'),\n  timestamp: z.string().datetime(),\n  version: z.string().default('1.0.0'),\n});\n\n/**\n * InventoryReserved Event Schema\n */\nexport const InventoryReservedSchema = z.object({\n  header: KafkaHeaderSchema,\n  payload: z.object({\n    productId: z.string().uuid(),\n    orderId: z.string().uuid(),\n    quantity: z.number().int().positive(),\n  }),\n});\n\n/**\n * StockAdjusted Event Schema\n */\nexport const StockAdjustedSchema = z.object({\n  header: KafkaHeaderSchema,\n  payload: z.object({\n    productId: z.string().uuid(),\n    adjustment: z.number().int(), // Can be positive or negative\n    reason: z.string().min(3),\n  }),\n});\n\n/**\n * StockReconciled Event Schema\n */\nexport const StockReconciledSchema = z.object({\n  header: KafkaHeaderSchema,\n  payload: z.object({\n    productId: z.string().uuid(),\n    previousTotal: z.number().int().nonnegative(),\n    newTotal: z.number().int().nonnegative(),\n    discrepancyDetected: z.boolean(),\n  }),\n});\n\n/**\n * Database Snapshot Schema\n * Represents the PostgreSQL row structure for inventory state.\n */\nexport const InventorySnapshotSchema = z.object({\n  product_id: z.string().uuid(),\n  sku: z.string().regex(SKU_REGEX),\n  total_stock: z.number().int().nonnegative(),\n  reserved_stock: z.number().int().nonnegative(),\n  updated_at: z.date(),\n}).refine((data) => data.total_stock >= data.reserved_stock, {\n  message: 'Database inconsistency: total_stock must be greater than or equal to reserved_stock',\n  path: ['total_stock'],\n});\n\n/**\n * Reconciliation Record Schema\n * Output structure for audit logs and reconciliation outcomes.\n * Explicitly excludes sensitive information.\n */\nexport const ReconciliationRecordSchema = z.object({\n  reconciliation_id: z.string().uuid(),\n  product_id: z.string().uuid(),\n  status: z.enum(['SUCCESS', 'DISCREPANCY_FOUND', 'FAILURE']),\n  detected_at: z.date().default(() => new Date()),\n  audit_details: z.object({\n    expected_total: z.number().int().nonnegative(),\n    actual_total: z.number().int().nonnegative(),\n    drift_amount: z.number().int(),\n  }),\n});\n\n/**\n * Type exports for downstream service logic\n */\nexport type InventoryReserved = z.infer<typeof InventoryReservedSchema>;\nexport type StockAdjusted = z.infer<typeof StockAdjustedSchema>;\nexport type StockReconciled = z.infer<typeof StockReconciledSchema>;\nexport type InventorySnapshot = z.infer<typeof InventorySnapshotSchema>;\nexport type ReconciliationRecord = z.infer<typeof ReconciliationRecordSchema>;\n\n/**\n * Validation utilities with structured error handling\n */\nexport const validateInventoryReserved = (data: unknown) => InventoryReservedSchema.safeParse(data);\nexport const validateStockAdjusted = (data: unknown) => StockAdjustedSchema.safeParse(data);\nexport const validateStockReconciled = (data: unknown) => StockReconciledSchema.safeParse(data);\nexport const validateInventorySnapshot = (data: unknown) => InventorySnapshotSchema.safeParse(data);\nexport const validateReconciliationRecord = (data: unknown) => ReconciliationRecordSchema.safeParse(data);\n",
+      "timestamp": "2026-04-03T23:10:23.907066Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "5AFE88418F11FD04C341F7A499EFBF5A8B9DE199ACCD448F410B29A76508A536",
+    "timestamp": 1775257823
+  }
+}

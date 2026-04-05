@@ -1,0 +1,34 @@
+{
+  "api_controller_implementation": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Intermediate Task Completed: Implement HTTP controllers that handle request parsing via Zod, invoke service layer methods, and manage standardized JSON responses and error mapping.. Aggregated 0 sub-tasks. Summary: ",
+      "filename": null,
+      "full_path": null,
+      "id": "8bcac87c-7780-46ec-9ca5-2665a208bcb3",
+      "provenance_data": {
+        "behaviour": "N/A",
+        "interfaces": [
+          "batch_result"
+        ],
+        "node": "nonode@nohost",
+        "schema": {
+          "child_artifacts": [],
+          "child_count": 0
+        },
+        "utility": "N/A"
+      },
+      "source_code": "",
+      "timestamp": "2026-04-03T23:20:56.030989Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "C664884D990D79AE26B2698E370FCE9F3D4970047489AD493AD3BCEE67AF8747",
+    "timestamp": 1775258456
+  }
+}

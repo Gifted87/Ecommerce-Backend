@@ -1,0 +1,29 @@
+{
+  "checkout_processor_requirements": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "c269137d6e4b2d3989269584b490f22f77e64319853965909282302302384752",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Production-ready package.json for the order checkout processor.",
+      "filename": "package.json",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/services/order/checkout_processor/package.json",
+      "id": "cfb5122e-82f2-446c-8b22-ecf99a9f2671",
+      "provenance_data": {
+        "behaviour": "Defines the production-ready package configuration for the checkout processor module, specifying core dependencies and build environment.",
+        "interfaces": [],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Enables high-concurrency, type-safe development of the order checkout state machine."
+      },
+      "source_code": "{\n  \"name\": \"checkout-processor\",\n  \"version\": \"1.0.0\",\n  \"description\": \"Core state transition orchestrator for ecommerce checkout processes\",\n  \"main\": \"dist/index.js\",\n  \"engines\": {\n    \"node\": \">=20.0.0\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"lint\": \"eslint 'src/**/*.ts'\",\n    \"test\": \"jest\",\n    \"start\": \"node dist/index.js\",\n    \"migrate\": \"knex migrate:latest\"\n  },\n  \"license\": \"UNLICENSED\",\n  \"dependencies\": {\n    \"ioredis\": \"5.4.1\",\n    \"kafkajs\": \"2.2.4\",\n    \"knex\": \"3.1.0\",\n    \"opossum\": \"8.3.1\",\n    \"pg\": \"8.12.0\",\n    \"pino\": \"9.3.2\",\n    \"zod\": \"3.23.8\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"29.5.12\",\n    \"@types/node\": \"20.14.10\",\n    \"@typescript-eslint/eslint-plugin\": \"7.14.1\",\n    \"@typescript-eslint/parser\": \"7.14.1\",\n    \"eslint\": \"8.57.0\",\n    \"jest\": \"29.7.0\",\n    \"ts-jest\": \"29.1.5\",\n    \"typescript\": \"5.5.3\"\n  }\n}",
+      "timestamp": "2026-04-03T23:04:11.350517Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "21A3D29F402BB37B4A28D651B6009517D28AF9F1B4B3D48655650962AC0BE10E",
+    "timestamp": 1775257451
+  }
+}

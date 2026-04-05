@@ -1,0 +1,36 @@
+{
+  "order_interface_types": {
+    "content": {
+      "acms_node_id": null,
+      "artifact_hash": "7EAC39C7236C4AB0A35C200C261FF7844E1E73685CB3B233925B1B49FB6BDEB8",
+      "author_id": "agent_node_nonode@nohost",
+      "constituents": null,
+      "cost_metrics": null,
+      "fact_text": "Standardized API Request/Response DTOs and Zod validation schemas for Order management.",
+      "filename": "order_interfaces.ts",
+      "full_path": "/home/gifted/acn/tmp/acn_workspaces/complex_ecommerce_backend/src/api/order/interfaces/types/order_interfaces.ts",
+      "id": "1fa6316a-4d73-4802-8352-1fdbc0a6cf1a",
+      "provenance_data": {
+        "behaviour": "Defines standard TypeScript interfaces and Zod validation schemas for order lifecycle operations, ensuring type safety and payload integrity between the transport and domain layers. Implements PII redaction logic for secure logging.",
+        "interfaces": [
+          "SuccessEnvelope<T>",
+          "ErrorEnvelope",
+          "CreateOrderRequest",
+          "UpdateOrderStatusRequest",
+          "OrderResponse",
+          "redactOrderPII(order: OrderResponse): Omit<OrderResponse, 'shipping_address'>"
+        ],
+        "node": "nonode@nohost",
+        "schema": {},
+        "utility": "Enforces strict input validation and provides a type-safe contract for API consumers, reducing runtime errors and improving observability by standardizing logging patterns."
+      },
+      "source_code": "import { z } from 'zod';\n\n/**\n * @fileoverview Order API DTOs and Validation Schemas.\n * Provides the contract between the HTTP transport layer and the Domain Services.\n */\n\n// --- Reusable Constants & Schemas ---\n\nexport const UUID_SCHEMA = z.string().uuid();\nexport const DECIMAL_STRING_SCHEMA = z.string().regex(/^\\d+(\\.\\d{1,2})?$/, 'Must be a valid decimal string');\nexport const ISO_DATE_SCHEMA = z.string().datetime();\n\n// --- Order Envelopes ---\n\nexport interface SuccessEnvelope<T> {\n  data: T;\n  meta: {\n    trace_id: string;\n    timestamp: string;\n  };\n}\n\nexport interface ErrorEnvelope {\n  error_code: string;\n  message: string;\n  trace_id: string;\n  details?: unknown;\n}\n\n// --- DTO Interfaces ---\n\nexport interface CreateOrderRequest {\n  items: Array<{\n    sku: string;\n    quantity: number;\n  }>;\n  shipping_address: {\n    street: string;\n    city: string;\n    postal_code: string;\n    country: string;\n  };\n  correlation_id: string;\n}\n\nexport interface UpdateOrderStatusRequest {\n  order_id: string;\n  status: 'PENDING' | 'PAID' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'REFUNDED';\n  version: number;\n  correlation_id: string;\n}\n\nexport interface OrderResponse {\n  order_id: string;\n  user_id: string;\n  status: string;\n  items: Array<{\n    sku: string;\n    quantity: number;\n    unit_price: string;\n    item_total: string;\n  }>;\n  shipping_address: {\n    street: string;\n    city: string;\n    postal_code: string;\n    country: string;\n  };\n  total_amount: string;\n  version: number;\n  correlation_id: string;\n  created_at: string;\n  updated_at: string;\n}\n\n// --- Zod Validation Schemas ---\n\nexport const CreateOrderSchema = z.object({\n  items: z.array(z.object({\n    sku: z.string().min(1),\n    quantity: z.number().int().positive(),\n  })).min(1),\n  shipping_address: z.object({\n    street: z.string().min(1),\n    city: z.string().min(1),\n    postal_code: z.string().min(3),\n    country: z.string().length(2),\n  }),\n  correlation_id: UUID_SCHEMA,\n});\n\nexport const UpdateOrderStatusSchema = z.object({\n  order_id: UUID_SCHEMA,\n  status: z.enum(['PENDING', 'PAID', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED']),\n  version: z.number().int().nonnegative(),\n  correlation_id: UUID_SCHEMA,\n});\n\n/**\n * Utility to redact PII from OrderResponse for logging purposes.\n */\nexport function redactOrderPII(order: OrderResponse): Omit<OrderResponse, 'shipping_address'> {\n  const { shipping_address, ...safeOrder } = order;\n  return safeOrder;\n}\n",
+      "timestamp": "2026-04-03T23:28:50.919855Z",
+      "validation_proof": null,
+      "verifier_id": "judge_bot"
+    },
+    "type": "artifact",
+    "hash": "C44EFB8ACFD6CEF3716E32AE463EEB70A989D3B783929870E75564B3891B3468",
+    "timestamp": 1775258930
+  }
+}
