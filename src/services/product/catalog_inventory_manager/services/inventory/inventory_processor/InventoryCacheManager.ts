@@ -1,5 +1,5 @@
 import Redis, { RedisOptions } from 'ioredis';
-import Opossum from 'opossum';
+import Opossum = require('opossum');
 import { Logger } from 'pino';
 
 /**
@@ -39,7 +39,8 @@ export interface CacheHealthStatus {
 export class InventoryCacheManager {
   private static instance: InventoryCacheManager;
   private readonly redis: Redis;
-  private readonly breaker: Opossum;
+  // Use any to bypass TS namespace issue
+  private readonly breaker: any;
   private readonly logger: Logger;
 
   private constructor(logger: Logger) {

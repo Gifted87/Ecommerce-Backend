@@ -1,14 +1,14 @@
 import { Pool } from 'pg';
 import Redis from 'ioredis';
 import { Kafka } from 'kafkajs';
-import Opossum from 'opossum';
+import Opossum = require('opossum');
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
-import { Resource } from '@opentelemetry/resources';
+import * as ResourceModule from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { z } from 'zod';
-import logger from '../logging/logger';
+import logger from '../infrastructure/logging/logger';
 
 /**
  * @fileoverview Health and Observability Module
@@ -30,7 +30,8 @@ export type HealthStatus = z.infer<typeof HealthSchema>;
 // --- Proactive Health Auditor (PHA) ---
 
 export class ProactiveHealthAuditor {
-  private readonly breaker: Opossum;
+  // Use any to bypass TS namespace issue
+  private readonly breaker: any;
 
   constructor(
     private readonly db: Pool,
@@ -112,7 +113,7 @@ export class DistributedObservabilityInstrumenter {
 
   constructor(serviceName: string, otlpEndpoint: string) {
     this.sdk = new NodeSDK({
-      resource: new Resource({
+      resource: new (ResourceModule as any)({
         [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
       }),
       traceExporter: new OTLPTraceExporter({
@@ -127,7 +128,7 @@ export class DistributedObservabilityInstrumenter {
     process.on('SIGTERM', () => {
       this.sdk.shutdown()
         .then(() => logger.info({ module: 'observability' }, 'Tracing SDK shut down'))
-        .catch(err => logger.error({ module: 'observability', error: err }, 'Error shutting down tracing SDK'));
+        .catch((err: any) => logger.error({ module: 'observability', error: err }, 'Error shutting down tracing SDK'));
     });
   }
 }

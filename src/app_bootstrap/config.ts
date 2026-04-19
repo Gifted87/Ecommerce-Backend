@@ -24,18 +24,25 @@ const envSchema = z.object({
   PORT: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(1).max(65535)),
 
   // Database Configuration
-  DB_URL: z.string().url(),
+  DB_URL: z.string().url().optional(),
+  DB_HOST: z.string().default('localhost'),
+  DB_PORT: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(1)).default('5432'),
+  DB_USER: z.string().default('postgres'),
+  DB_PASSWORD: z.string().default('postgres'),
+  DB_NAME: z.string().default('ecommerce'),
   DB_POOL_MIN: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(0)),
   DB_POOL_MAX: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(1)),
 
   // Redis Configuration
   REDIS_URL: z.string().url(),
+  REDIS_HOST: z.string().default('localhost'),
+  REDIS_PORT: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(1)).default('6379'),
   REDIS_PASSWORD: z.string().optional(),
   REDIS_TTL_DEFAULT: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(0)),
   REDIS_TIMEOUT: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(0)),
 
   // Kafka Configuration
-  KAFKA_BROKERS: z.string().transform((val) => val.split(',').map(s => s.trim())),
+  KAFKA_BROKER_URL: z.string().transform((val) => val.split(',').map(s => s.trim())),
   KAFKA_CLIENT_ID: z.string().min(1),
   KAFKA_GROUP_ID: z.string().min(1),
   KAFKA_PRODUCER_TIMEOUT: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(0)),
@@ -44,6 +51,8 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(64, 'JWT_SECRET must be at least 64 characters long'),
   JWT_EXPIRATION: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(60)),
   ARGON2_SALT_ROUNDS: z.string().transform((val) => parseInt(val, 10)).pipe(z.number().min(10).max(20)),
+  SECURITY_MASTER_KEY: z.string().min(32, 'SECURITY_MASTER_KEY must be at least 32 characters long'),
+  SECURITY_PEPPER: z.string().min(16, 'SECURITY_PEPPER must be at least 16 characters long'),
 }).refine((data) => data.DB_POOL_MIN <= data.DB_POOL_MAX, {
   message: "DB_POOL_MIN cannot be greater than DB_POOL_MAX",
   path: ["DB_POOL_MIN"],

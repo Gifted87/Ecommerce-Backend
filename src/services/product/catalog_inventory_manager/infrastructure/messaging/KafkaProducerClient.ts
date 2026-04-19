@@ -1,5 +1,5 @@
-import { Kafka, Producer, ProducerRecord, ProducerConfig } from 'kafkajs';
-import CircuitBreaker from 'opossum';
+import { Kafka, Producer, ProducerRecord, ProducerConfig, SASLOptions } from 'kafkajs';
+import Opossum = require('opossum');
 import { z } from 'zod';
 import { Logger } from 'pino';
 
@@ -26,7 +26,8 @@ export type KafkaClientConfig = z.infer<typeof KafkaConfigSchema>;
 export class KafkaProducerClient {
   private readonly kafka: Kafka;
   private readonly producer: Producer;
-  private readonly circuitBreaker: CircuitBreaker;
+  // Use any to bypass TS namespace issue
+  private readonly circuitBreaker: any;
   private readonly logger: Logger;
   private isConnected: boolean = false;
 
@@ -45,10 +46,10 @@ export class KafkaProducerClient {
       brokers: validatedConfig.brokers,
       ssl: validatedConfig.ssl,
       sasl: validatedConfig.sasl ? {
-        mechanism: validatedConfig.sasl.mechanism,
+        mechanism: validatedConfig.sasl.mechanism as 'plain' | 'scram-sha-256' | 'scram-sha-512',
         username: validatedConfig.sasl.username,
         password: validatedConfig.sasl.password,
-      } : undefined,
+      } as SASLOptions : undefined,
     });
 
     const producerConfig: ProducerConfig = {
@@ -60,7 +61,7 @@ export class KafkaProducerClient {
     this.producer = this.kafka.producer(producerConfig);
 
     // Opossum Circuit Breaker to prevent resource exhaustion during broker outages
-    this.circuitBreaker = new CircuitBreaker(
+    this.circuitBreaker = new Opossum(
       async (record: ProducerRecord) => await this.producer.send(record),
       {
         timeout: 5000,
@@ -158,7 +159,7 @@ export class KafkaProducerClient {
     this.circuitBreaker.on('close', () => 
       this.logger.info('Kafka producer circuit breaker CLOSED: Resuming normal traffic.'));
       
-    this.circuitBreaker.on('fallback', (error) => 
+    this.circuitBreaker.on('fallback', (error: any) => 
       this.logger.warn({ error }, 'Circuit breaker triggered fallback'));
   }
 }

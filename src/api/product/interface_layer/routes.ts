@@ -2,104 +2,87 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { Logger } from 'pino';
 import Breaker from 'opossum';
-import { v4 as uuidv4 } from 'uuid';
+import { CatalogService } from '../../../services/product/catalog_inventory_manager/services/catalog/catalogService';
+import { InventoryProcessor } from '../../../services/product/catalog_inventory_manager/services/inventory/inventory_processor/InventoryProcessor';
 
 /**
  * Zod Schemas for Request Validation
  */
-const GetProductsSchema = z.object({
-  limit: z.coerce.number().int().positive().default(20),
-  offset: z.coerce.number().int().nonnegative().default(0),
-  category: z.string().optional(),
-  priceRange: z.string().regex(/^\d+-\d+$/).optional(),
-});
-
 const InventoryReserveSchema = z.object({
-  sku: z.string().min(1),
+  productId: z.string().uuid(),
   quantity: z.number().int().positive(),
 });
 
 /**
  * Interfaces for Dependencies
  */
-interface Dependencies {
+export interface ProductRouterDependencies {
   logger: Logger;
-  catalogService: any;
-  inventoryRepository: any;
-  authMiddleware: (options: { requiredRoles?: string[] }) => (req: Request, res: Response, next: NextFunction) => void;
+  catalogService: CatalogService;
+  inventoryProcessor: InventoryProcessor;
+  authMiddleware: (options?: { requiredRoles?: string[]; mfaRequired?: boolean }) => (req: Request, res: Response, next: NextFunction) => void;
+  validateSchema: (schema: any) => (req: Request, res: Response, next: NextFunction) => void;
 }
 
 /**
  * Routes definition for Catalog and Inventory
  */
-export const createProductRouter = (deps: Dependencies): Router => {
+export const createProductRouter = (deps: ProductRouterDependencies): Router => {
   const router = Router();
-  const { logger, catalogService, inventoryRepository, authMiddleware } = deps;
+  const { logger, catalogService, inventoryProcessor, authMiddleware, validateSchema } = deps;
 
   // Circuit Breaker Options
   const breakerOptions = { timeout: 3000, errorThresholdPercentage: 50, resetTimeout: 30000 };
 
-  const catalogBreaker = new Breaker(async (params: any) => await catalogService.fetchProducts(params), breakerOptions);
-  const inventoryBreaker = new Breaker(async (params: any) => await inventoryRepository.reserve(params), breakerOptions);
+  const catalogBreaker = new Breaker(async (params: { sku: string; correlationId: string }) => 
+    await catalogService.getProductBySku(params.sku, params.correlationId), 
+    breakerOptions
+  );
 
   /**
-   * GET /products - List products with pagination/filtering
+   * GET /products/:sku - Get product details
    */
-  router.get('/products', async (req: Request, res: Response, next: NextFunction) => {
-    const correlationId = (req.headers['x-request-id'] as string) || uuidv4();
+  router.get('/products/:sku', async (req: Request, res: Response, next: NextFunction) => {
+    const correlationId = (req as any).correlationId;
     try {
-      const validated = GetProductsSchema.parse(req.query);
-      
-      const products = await catalogBreaker.fire({ ...validated, correlationId });
-      res.status(200).json({ data: products, meta: { correlationId } });
-    } catch (err: any) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ code: 'INVALID_INPUT', errors: err.errors });
+      const product = await catalogBreaker.fire({ sku: req.params.sku, correlationId });
+      if (!product) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Product not found', correlationId });
       }
-      logger.error({ err, correlationId }, 'Error fetching products');
-      res.status(503).json({ code: 'SERVICE_UNAVAILABLE', message: 'Catalog service currently unavailable' });
+      res.status(200).json({ data: product, meta: { correlationId } });
+    } catch (err) {
+      next(err);
     }
   });
 
   /**
-   * POST /inventory/:sku/reserve - Reserve inventory
+   * POST /inventory/reserve - Reserve inventory
    */
   router.post(
-    '/inventory/:sku/reserve',
+    '/inventory/reserve',
     authMiddleware({ requiredRoles: ['USER', 'SERVICE_ACCOUNT'] }),
+    validateSchema(InventoryReserveSchema),
     async (req: Request, res: Response, next: NextFunction) => {
-      const correlationId = (req.headers['x-request-id'] as string) || uuidv4();
+      const correlationId = (req as any).correlationId;
       const idempotencyKey = req.headers['x-idempotency-key'] as string;
 
       if (!idempotencyKey) {
-        return res.status(400).json({ code: 'MISSING_IDEMPOTENCY_KEY', message: 'X-Idempotency-Key header is required' });
+        return res.status(400).json({ code: 'MISSING_IDEMPOTENCY_KEY', message: 'X-Idempotency-Key header is required', correlationId });
       }
 
       try {
-        const validated = InventoryReserveSchema.parse({
-          sku: req.params.sku,
-          quantity: req.body.quantity,
-        });
+        const validated = req.body; // Already validated by middleware
 
-        const result = await inventoryBreaker.fire({
-          ...validated,
-          idempotencyKey,
+        await inventoryProcessor.reserveStock({
+          productId: validated.productId,
+          amount: validated.quantity,
           correlationId,
+          userId: (req as any).user?.sub || 'system',
         });
 
-        res.status(201).json({ status: 'RESERVED', reservationId: result.id, correlationId });
-      } catch (err: any) {
-        if (err instanceof z.ZodError) {
-          return res.status(400).json({ code: 'INVALID_INPUT', errors: err.errors });
-        }
-        
-        // Translate domain-specific errors
-        if (err.name === 'InsufficientStockError') {
-          return res.status(409).json({ code: 'INSUFFICIENT_STOCK', message: err.message });
-        }
-
-        logger.error({ err, correlationId, sku: req.params.sku }, 'Inventory reservation failed');
-        res.status(503).json({ code: 'SERVICE_UNAVAILABLE', message: 'Inventory service temporarily unavailable' });
+        res.status(201).json({ status: 'RESERVED', correlationId });
+      } catch (err) {
+        next(err);
       }
     }
   );

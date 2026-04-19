@@ -1,7 +1,7 @@
 import { Knex } from 'knex';
 import { Logger } from 'pino';
-import CircuitBreaker from 'opossum';
-import { Inventory, InventorySchema, validateInventoryMutation } from '../../domain/schemas';
+import Opossum = require('opossum');
+import { Inventory, InventorySchema, validateInventoryMutation } from '@/domain/product/schemas/productInventorySchema';
 
 /**
  * Custom error class for inventory domain failures.
@@ -29,7 +29,8 @@ export class InventoryRepositoryError extends Error {
  */
 export class InventoryRepository {
   private readonly tableName = 'inventory';
-  private readonly breaker: CircuitBreaker;
+  // Use any to bypass TS namespace issue
+  private readonly breaker: any;
 
   constructor(
     private readonly knex: Knex,
@@ -38,7 +39,7 @@ export class InventoryRepository {
     this.logger = this.logger.child({ module: 'repository/inventory' });
 
     // Circuit breaker configuration per mandate
-    this.breaker = new CircuitBreaker(async (fn: () => Promise<any>) => await fn(), {
+    this.breaker = new Opossum(async (fn: () => Promise<any>) => await fn(), {
       timeout: 3000,
       errorThresholdPercentage: 50,
       resetTimeout: 30000,
@@ -112,7 +113,7 @@ export class InventoryRepository {
   /**
    * Reserves stock for a product.
    */
-  public async reserveStock(productId: string, amount: number): Promise<Inventory> {
+  public async reserveStock(productId: string, amount: number, idempotencyKey: string): Promise<Inventory> {
     const start = Date.now();
     try {
       return await this.breaker.fire(() =>
@@ -164,7 +165,7 @@ export class InventoryRepository {
   /**
    * Updates total stock (e.g., adding stock replenishment).
    */
-  public async updateStock(productId: string, totalChange: number): Promise<Inventory> {
+  public async updateStock(productId: string, totalChange: number, requestId: string): Promise<Inventory> {
     const start = Date.now();
     try {
       return await this.breaker.fire(() =>

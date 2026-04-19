@@ -1,5 +1,5 @@
 import Redis from 'ioredis';
-import Opossum from 'opossum';
+import Opossum = require('opossum');
 import { randomUUID } from 'crypto';
 import { Logger } from 'pino';
 
@@ -19,7 +19,8 @@ export class DistributedLockError extends Error {
  */
 export class DistributedLockService {
   private redis: Redis;
-  private breaker: Opossum;
+  // Use any to bypass TS namespace issue
+  private breaker: any;
   private readonly DEFAULT_TTL = 5; // seconds
 
   /**

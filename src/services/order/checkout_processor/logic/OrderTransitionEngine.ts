@@ -2,9 +2,9 @@ import { Decimal } from 'decimal.js';
 import { Logger } from 'pino';
 import { 
   OrderStatus, 
-  OrderTransitions, 
+  OrderTransitions,
   OrderItem 
-} from '../../../domain/order_schemas';
+} from '../types/order_types';
 
 /**
  * Custom error thrown when a requested state transition is not permitted.

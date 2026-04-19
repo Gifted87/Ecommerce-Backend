@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 /**
  * @fileoverview Order and Checkout Domain Types.
  * Definitive source of truth for order lifecycle data structures,
@@ -14,45 +16,66 @@ export enum OrderStatus {
   DELIVERED = 'DELIVERED',
   CANCELLED = 'CANCELLED',
   REFUNDED = 'REFUNDED',
+  PROCESSING = 'PROCESSING',
+  PLACED = 'PLACED',
+  FAILED = 'FAILED',
 }
 
 /**
- * Represents a line item in an order.
+ * Zod schema for order line items.
  */
-export interface OrderItem {
-  sku: string;
-  quantity: number;
-  unit_price: string; // Decimal string for precision
-  item_total: string; // Decimal string for precision
-}
+export const OrderItemSchema = z.object({
+  sku: z.string(),
+  quantity: z.number().int().positive(),
+  unit_price: z.string().refine((val) => !isNaN(Number(val))),
+  item_total: z.string().refine((val) => !isNaN(Number(val))),
+});
 
 /**
- * Shipping information containing sensitive PII.
+ * Zod schema for shipping address.
  */
-export interface ShippingAddress {
-  street: string;
-  city: string;
-  postal_code: string;
-  country: string; // ISO 3166-1 alpha-2
-}
+export const ShippingAddressSchema = z.object({
+  street: z.string(),
+  city: z.string(),
+  postal_code: z.string(),
+  country: z.string().length(2), // ISO 3166-1 alpha-2
+});
 
 /**
- * Core Order domain entity.
+ * Zod schema for the Order model.
+ */
+export const OrderModelSchema = z.object({
+  order_id: z.string().uuid(),
+  user_id: z.string().uuid(),
+  status: z.nativeEnum(OrderStatus),
+  items: z.array(OrderItemSchema),
+  shipping_address: ShippingAddressSchema,
+  total_amount: z.string().refine((val) => !isNaN(Number(val))),
+  version: z.number().int().nonnegative().optional(),
+  correlation_id: z.string().uuid().optional(),
+  tracking_number: z.string().optional(),
+  created_at: z.string().optional(),
+  updated_at: z.string().optional(),
+});
+
+export const OrderRequestSchema = z.object({
+  orderId: z.string().uuid(),
+  userId: z.string().uuid(),
+  items: z.array(OrderItemSchema),
+  total_amount: z.string(),
+  shipping_address: ShippingAddressSchema,
+  payment_token: z.string(),
+  correlationId: z.string().uuid(),
+});
+
+/**
  * Represents the persistent state of an order in the system.
  */
-export interface Order {
-  order_id: string; // UUID v4
-  user_id: string; // UUID v4
-  status: OrderStatus;
-  items: OrderItem[];
-  shipping_address: ShippingAddress;
-  total_amount: string; // Decimal string
-  version: number; // For optimistic locking
-  correlation_id: string; // For distributed tracing
-  tracking_number?: string;
-  created_at: string; // ISO 8601
-  updated_at: string; // ISO 8601
-}
+export type OrderModel = z.infer<typeof OrderModelSchema>;
+export type Order = OrderModel; // Alias for backward compatibility
+export type OrderItem = z.infer<typeof OrderItemSchema>;
+export type ShippingAddress = z.infer<typeof ShippingAddressSchema>;
+export type OrderRequest = z.infer<typeof OrderRequestSchema>;
 
 /**
  * Context for state transitions.
@@ -102,3 +125,18 @@ export interface IOrderRepository {
 export interface IUnitOfWork {
   executeInTransaction<T>(work: (tx: unknown) => Promise<T>): Promise<T>;
 }
+
+/**
+ * State Transition Map.
+ */
+export const OrderTransitions: Record<OrderStatus, OrderStatus[]> = {
+  [OrderStatus.PENDING]: [OrderStatus.PAID, OrderStatus.CANCELLED, OrderStatus.PROCESSING, OrderStatus.FAILED],
+  [OrderStatus.PROCESSING]: [OrderStatus.PLACED, OrderStatus.CANCELLED, OrderStatus.FAILED],
+  [OrderStatus.PLACED]: [OrderStatus.SHIPPED, OrderStatus.CANCELLED, OrderStatus.FAILED],
+  [OrderStatus.PAID]: [OrderStatus.SHIPPED, OrderStatus.CANCELLED, OrderStatus.FAILED],
+  [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED, OrderStatus.REFUNDED],
+  [OrderStatus.DELIVERED]: [OrderStatus.REFUNDED],
+  [OrderStatus.CANCELLED]: [],
+  [OrderStatus.REFUNDED]: [],
+  [OrderStatus.FAILED]: [OrderStatus.PENDING], // Allow retry by transitioning back to PENDING if applicable
+};

@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { Logger } from 'pino';
-import Opossum from 'opossum';
-import { InventoryRepository, InsufficientStockError, InventoryRepositoryError } from '../../../domain/inventory/repository';
-import { InventoryCacheManager } from '../../../infrastructure/cache/redis';
+import type { CircuitBreaker } from 'opossum';
+import { InventoryRepository, InsufficientStockError, InventoryRepositoryError } from '@/domain/inventory/repository';
+import { InventoryCacheManager } from '@/infrastructure/cache/redis';
 
 /**
  * Validation schemas for catalog browsing.
@@ -26,8 +26,8 @@ const ReservationSchema = z.object({
  * Orchestrates between Cache, Repository, and Express transport layer.
  */
 export class ProductCatalogAndInventoryController {
-  private readonly catalogBreaker: Opossum;
-  private readonly inventoryBreaker: Opossum;
+  private readonly catalogBreaker: any;
+  private readonly inventoryBreaker: any;
 
   constructor(
     private readonly inventoryRepository: InventoryRepository,
@@ -37,13 +37,13 @@ export class ProductCatalogAndInventoryController {
     this.logger = logger.child({ module: 'ProductCatalogAndInventoryController' });
 
     // Circuit breakers as per mandate
-    this.catalogBreaker = new Opossum(async (fn: () => Promise<any>) => await fn(), {
+    this.catalogBreaker = new (require('opossum'))(async (fn: () => Promise<any>) => await fn(), {
       timeout: 3000,
       errorThresholdPercentage: 50,
       resetTimeout: 30000,
     });
 
-    this.inventoryBreaker = new Opossum(async (fn: () => Promise<any>) => await fn(), {
+    this.inventoryBreaker = new (require('opossum'))(async (fn: () => Promise<any>) => await fn(), {
       timeout: 3000,
       errorThresholdPercentage: 50,
       resetTimeout: 30000,

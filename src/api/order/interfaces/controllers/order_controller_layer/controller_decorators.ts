@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import logger from '../../../../../../infrastructure/logging/logger';
+import logger from '@/shared/logger';
 
 /**
  * Sensitive keys to redact from logs.

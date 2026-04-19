@@ -3,7 +3,7 @@ import { Pool } from 'pg';
 import Redis from 'ioredis';
 import { z } from 'zod';
 import pino from 'pino';
-import CircuitBreaker from 'opossum';
+import Opossum = require('opossum');
 import { createHmac, timingSafeEqual } from 'crypto';
 import { setTimeout } from 'timers/promises';
 
@@ -43,7 +43,8 @@ export class ConsumerEngine {
   private readonly logger: pino.Logger;
   private readonly hmacSecret: string;
   private readonly dlqTopic: string;
-  private readonly breaker: CircuitBreaker;
+  // Use any to bypass TS namespace issue
+  private readonly breaker: any;
   private isShuttingDown: boolean = false;
 
   constructor(private readonly config: ConsumerEngineConfig) {
@@ -73,7 +74,7 @@ export class ConsumerEngine {
     this.consumer = this.kafka.consumer({ groupId: config.groupId });
     this.producer = this.kafka.producer();
 
-    this.breaker = new CircuitBreaker(this.processEvent.bind(this), {
+    this.breaker = new Opossum(this.processEvent.bind(this), {
       timeout: 30000,
       errorThresholdPercentage: 50,
       resetTimeout: 30000,

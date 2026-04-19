@@ -6,8 +6,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { Logger } from 'pino';
 import { Redis } from 'ioredis';
 import { Pool } from 'pg';
-import { handleDomainError } from '../middleware/error_handler';
-import logger from '../utils/logger';
+import { Kafka } from 'kafkajs';
+import { composeDependencies } from './composition_root';
+import logger from '../shared/logger';
+import { requestIdMiddleware as requestContext } from '@/middleware/observability';
+import { errorHandler as handleGlobalError } from '@/middleware/error';
 
 /**
  * @fileoverview Server Bootstrap Module.
@@ -18,6 +21,7 @@ import logger from '../utils/logger';
 export interface ServerDependencies {
   redis: Redis;
   db: Pool;
+  kafka: Kafka;
   logger: Logger;
 }
 
@@ -26,9 +30,9 @@ export interface ServerDependencies {
  * Ensures security headers, rate limiting, correlation tracing, and error handling.
  * 
  * @param deps - Injected infrastructure dependencies.
- * @returns {Express} The configured Express application.
+ * @returns {Promise<Express>} The configured Express application.
  */
-export const createServer = (deps: ServerDependencies): Express => {
+export const createServer = async (deps: ServerDependencies): Promise<Express> => {
   const app = express();
 
   // 1. Security: Helmet for standard HTTP headers mitigation
@@ -54,13 +58,16 @@ export const createServer = (deps: ServerDependencies): Express => {
   // Parse JSON bodies with limit to prevent denial-of-service
   app.use(express.json({ limit: '10kb' }));
 
+  // 3.5 Composition Root - Inject Dependencies
+  const { userRouter, productRouter, orderRouter, cartRouter } = await composeDependencies(deps.db, deps.redis, deps.kafka, deps.logger);
+
+  app.use('/api/v1/users', userRouter);
+  app.use('/api/v1/products', productRouter);
+  app.use('/api/v1/orders', orderRouter);
+  app.use('/api/v1/cart', cartRouter);
+
   // 4. Observability: Correlation ID Middleware
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    const correlationId = (req.headers['x-correlation-id'] as string) || uuidv4();
-    req.headers['x-correlation-id'] = correlationId;
-    res.setHeader('x-correlation-id', correlationId);
-    next();
-  });
+  app.use(requestContext);
 
   // Health check endpoint (bypasses business logic, strictly infrastructure)
   app.get('/health', async (req: Request, res: Response) => {
@@ -75,7 +82,7 @@ export const createServer = (deps: ServerDependencies): Express => {
   });
 
   // 5. Global Error Handling (Must be defined last)
-  app.use(handleDomainError);
+  app.use(handleGlobalError);
 
   return app;
 };

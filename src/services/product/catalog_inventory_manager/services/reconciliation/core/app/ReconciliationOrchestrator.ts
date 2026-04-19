@@ -1,124 +1,51 @@
 import { Logger } from 'pino';
-import { Knex } from 'knex';
-import CircuitBreaker from 'opossum';
-import { z } from 'zod';
-import { ReconciliationCacheManager } from '../infrastructure/ReconciliationCacheManager';
-import { ConfigurationProvider } from '../config/ConfigurationProvider';
+import Opossum = require('opossum');
+import { ReconciliationCacheManager } from '../infrastructure/cache/reconciliation_cache_manager';
+import { ConfigurationProvider } from '../config/configService';
+import { DiscrepancyAuditorEngine } from '../logic/auditor/discrepancyAuditorEngine';
+import { EventReplayEngine } from '../logic/replay/event_replay_engine';
 
 /**
- * Zod schema for validated inventory discrepancy events.
- */
-export const DiscrepancySchema = z.object({
-  sku: z.string(),
-  dbQuantity: z.number().int(),
-  eventQuantity: z.number().int(),
-  variance: z.number().int(),
-  timestamp: z.string().datetime(),
-});
-
-export type Discrepancy = z.infer<typeof DiscrepancySchema>;
-
-/**
- * Orchestrates the inventory reconciliation cycle.
- * Manages distributed locks, transaction snapshots, and discrepancy resolution.
+ * ReconciliationOrchestrator
+ * High-level service to manage the lifecycle of reconciliation jobs.
  */
 export class ReconciliationOrchestrator {
-  private readonly dbBreaker: CircuitBreaker;
-  private readonly cacheBreaker: CircuitBreaker;
+  // Use any to bypass TS namespace issue
+  private readonly auditorBreaker: any;
+  // Use any to bypass TS namespace issue
+  private readonly replayBreaker: any;
 
   constructor(
-    private readonly db: Knex,
-    private readonly cacheManager: ReconciliationCacheManager,
-    private readonly configProvider: ConfigurationProvider,
+    private readonly cache: ReconciliationCacheManager,
+    private readonly config: ConfigurationProvider,
+    private readonly auditor: DiscrepancyAuditorEngine,
+    private readonly replayEngine: EventReplayEngine,
     private readonly logger: Logger
   ) {
+    this.logger = logger.child({ module: 'ReconciliationOrchestrator' });
+
     const breakerOptions = {
-      timeout: 5000,
-      errorThresholdPercentage: 50,
-      resetTimeout: 30000,
+      timeout: 10000,
+      errorThresholdPercentage: 30,
+      resetTimeout: 60000,
     };
 
-    this.dbBreaker = new CircuitBreaker(async (fn: () => Promise<any>) => fn(), breakerOptions);
-    this.cacheBreaker = new CircuitBreaker(async (fn: () => Promise<any>) => fn(), breakerOptions);
+    this.auditorBreaker = new Opossum(async (fn: () => Promise<any>) => await fn(), breakerOptions);
+    this.replayBreaker = new Opossum(async (fn: () => Promise<any>) => await fn(), breakerOptions);
   }
 
-  /**
-   * Executes a reconciliation cycle for a specific SKU range.
-   */
-  public async reconcileSkuRange(skuRange: string): Promise<void> {
-    this.logger.info({ msg: 'Starting reconciliation cycle', skuRange });
-
-    const locked = await this.cacheBreaker.fire(() => this.cacheManager.lockSkuRange(skuRange, 60));
-    if (!locked) {
-      this.logger.warn({ msg: 'Could not acquire lock for SKU range', skuRange });
-      return;
-    }
-
+  public async orchestrate(correlationId: string): Promise<void> {
+    this.logger.info({ correlationId }, 'Starting orchestration');
+    
     try {
-      await this.db.transaction(async (trx) => {
-        // Snapshot inventory state
-        const snapshot = await this.dbBreaker.fire(async () =>
-          trx('inventory')
-            .select('sku', 'quantity')
-            .where('sku', 'like', `${skuRange}%`)
-            .forUpdate()
-        );
-
-        // Audit against event store stream
-        const discrepancies = await this.performAudit(snapshot);
-
-        // Resolve discrepancies
-        for (const discrepancy of discrepancies) {
-          await this.resolveDiscrepancy(trx, discrepancy);
-        }
-      });
-    } catch (error) {
-      this.logger.error({ msg: 'Reconciliation cycle failed', skuRange, error });
-      throw error;
-    } finally {
-      await this.cacheBreaker.fire(() => this.cacheManager.releaseSkuRange(skuRange));
-      this.logger.info({ msg: 'Reconciliation cycle completed', skuRange });
-    }
-  }
-
-  private async performAudit(snapshot: any[]): Promise<Discrepancy[]> {
-    const discrepancies: Discrepancy[] = [];
-    
-    for (const item of snapshot) {
-      const cachedState = await this.cacheBreaker.fire(() => this.cacheManager.getInventoryState(item.sku));
+      // Logic for orchestrating auditing and replay
+      await this.auditorBreaker.fire(() => this.auditor.audit(correlationId));
+      await this.replayBreaker.fire(() => this.replayEngine.start());
       
-      if (cachedState && cachedState.quantity !== item.quantity) {
-        const variance = cachedState.quantity - item.quantity;
-        discrepancies.push({
-          sku: item.sku,
-          dbQuantity: item.quantity,
-          eventQuantity: cachedState.quantity,
-          variance,
-          timestamp: new Date().toISOString(),
-        });
-      }
+      this.logger.info({ correlationId }, 'Orchestration complete');
+    } catch (error: any) {
+      this.logger.error({ error, correlationId }, 'Orchestration failed');
+      throw error;
     }
-    return discrepancies;
-  }
-
-  private async resolveDiscrepancy(trx: Knex.Transaction, discrepancy: Discrepancy): Promise<void> {
-    const THRESHOLD = 100;
-    
-    if (Math.abs(discrepancy.variance) > THRESHOLD) {
-      this.logger.error({
-        msg: 'CRITICAL_INCONSISTENCY detected',
-        diagnostic: this.configProvider.redact({ discrepancy }),
-      });
-      return;
-    }
-
-    await trx('inventory')
-      .where('sku', discrepancy.sku)
-      .update({
-        quantity: discrepancy.eventQuantity,
-        updated_at: this.db.fn.now(),
-      });
-
-    this.logger.info({ msg: 'Discrepancy resolved', sku: discrepancy.sku, newQuantity: discrepancy.eventQuantity });
   }
 }

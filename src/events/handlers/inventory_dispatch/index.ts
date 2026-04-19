@@ -2,7 +2,7 @@ import { Kafka, Producer, ProducerRecord } from 'kafkajs';
 import { z } from 'zod';
 import { Logger } from 'pino';
 import * as crypto from 'crypto';
-import CircuitBreaker from 'opossum';
+import Opossum = require('opossum');
 
 /**
  * Interface for components that support graceful shutdown.
@@ -41,7 +41,8 @@ export type InventoryEvent = z.infer<typeof InventoryEventSchema>;
 export class InventoryEventDispatcher implements GracefulShutdownComponent {
   public readonly name = 'InventoryEventDispatcher';
   private readonly producer: Producer;
-  private readonly breaker: CircuitBreaker;
+  // Use any to bypass TS namespace issue
+  private readonly breaker: any;
   private readonly hmacSecret: string;
 
   constructor(
@@ -66,7 +67,7 @@ export class InventoryEventDispatcher implements GracefulShutdownComponent {
       resetTimeout: 30000,
     };
 
-    this.breaker = new CircuitBreaker(this.sendToKafka.bind(this), breakerOptions);
+    this.breaker = new Opossum(this.sendToKafka.bind(this), breakerOptions);
 
     this.breaker.on('open', () => this.logger.error({ module: this.name }, 'Circuit breaker opened'));
     this.breaker.on('halfOpen', () => this.logger.warn({ module: this.name }, 'Circuit breaker half-open'));

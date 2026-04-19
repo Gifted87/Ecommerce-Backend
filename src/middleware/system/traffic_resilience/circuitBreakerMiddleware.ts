@@ -1,4 +1,4 @@
-import CircuitBreaker from 'opossum';
+import Opossum = require('opossum');
 import { Logger } from 'pino';
 import { z } from 'zod';
 import createError from 'http-errors';
@@ -33,7 +33,8 @@ export interface CircuitBreakerHealth {
  */
 export class CircuitBreakerFactory {
   private readonly logger: Logger;
-  private readonly breakers: Map<string, CircuitBreaker> = new Map();
+  // Use any to bypass TS namespace issue
+  private readonly breakers: Map<string, any> = new Map();
 
   constructor(logger: Logger) {
     this.logger = logger.child({ module: 'CircuitBreakerFactory' });
@@ -52,10 +53,10 @@ export class CircuitBreakerFactory {
     action: (...args: A) => Promise<T>,
     fallback: (err: Error, ...args: A) => Promise<T>,
     config?: Partial<CircuitBreakerConfig>
-  ): CircuitBreaker {
+  ): any {
     const validatedConfig = CircuitBreakerConfigSchema.parse(config || {});
 
-    const breaker = new CircuitBreaker(action, {
+    const breaker = new Opossum(action, {
       timeout: validatedConfig.timeout,
       errorThresholdPercentage: validatedConfig.errorThresholdPercentage,
       resetTimeout: validatedConfig.resetTimeout,

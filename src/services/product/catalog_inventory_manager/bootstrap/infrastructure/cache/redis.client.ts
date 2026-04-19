@@ -1,5 +1,5 @@
 import Redis, { Cluster, RedisOptions } from 'ioredis';
-import Opossum from 'opossum';
+import Opossum = require('opossum');
 import { z } from 'zod';
 import { pino } from 'pino';
 
@@ -35,7 +35,8 @@ export class RedisCacheError extends Error {
 export class RedisClient {
   private static instance: RedisClient;
   private client: Redis | Cluster;
-  private breaker: Opossum;
+  // Use any to bypass TS namespace issue
+  private breaker: any;
   private log = logger.child({ module: 'RedisClient' });
 
   private constructor() {

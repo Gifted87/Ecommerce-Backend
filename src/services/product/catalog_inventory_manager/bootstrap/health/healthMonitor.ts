@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 import Redis from 'ioredis';
 import { Kafka, Admin } from 'kafkajs';
-import Opossum from 'opossum';
+import Opossum = require('opossum');
 import { z } from 'zod';
 import pino from 'pino';
 
@@ -59,7 +59,8 @@ class KafkaProbe implements IHealthProbe {
 }
 
 export class HealthMonitorService {
-  private readonly breakers: Map<string, Opossum> = new Map();
+  // Use any to bypass TS namespace issue
+  private readonly breakers: Map<string, any> = new Map();
   private readonly probes: IHealthProbe[] = [];
   private eventLoopLag: number = 0;
 
@@ -116,8 +117,8 @@ export class HealthMonitorService {
       if (result.status === 'fulfilled') {
         components[name] = { status: 'UP' };
       } else {
-        components[name] = { status: 'DOWN', message: result.reason.message };
-        logger.error({ component: name, error: result.reason }, 'Health check failed');
+        components[name] = { status: 'DOWN', message: (result as any).reason.message };
+        logger.error({ component: name, error: (result as any).reason }, 'Health check failed');
       }
     });
 

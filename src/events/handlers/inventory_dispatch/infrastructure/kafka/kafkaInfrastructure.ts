@@ -5,9 +5,10 @@ import {
   ProducerRecord, 
   EachMessagePayload, 
   SASLMechanism, 
-  ProducerConfig 
+  ProducerConfig,
+  SASLOptions
 } from 'kafkajs';
-import CircuitBreaker from 'opossum';
+import Opossum = require('opossum');
 import { z } from 'zod';
 import { Logger } from 'pino';
 import { createHmac, timingSafeEqual } from 'crypto';
@@ -38,7 +39,8 @@ export type KafkaClientConfig = z.infer<typeof KafkaConfigSchema>;
 export class KafkaInfrastructure {
   private readonly kafka: Kafka;
   private readonly producer: Producer;
-  private readonly producerBreaker: CircuitBreaker<[ProducerRecord], any>;
+  // Use any to bypass TS namespace issue
+  private readonly producerBreaker: any;
   private readonly logger: Logger;
   private readonly hmacSecret: string;
   private readonly dlqTopic: string;
@@ -58,7 +60,7 @@ export class KafkaInfrastructure {
         mechanism: validatedConfig.sasl.mechanism as SASLMechanism,
         username: validatedConfig.sasl.username,
         password: validatedConfig.sasl.password,
-      } : undefined,
+      } as SASLOptions : undefined,
     });
 
     const producerConfig: ProducerConfig = {
@@ -68,7 +70,7 @@ export class KafkaInfrastructure {
 
     this.producer = this.kafka.producer(producerConfig);
 
-    this.producerBreaker = new CircuitBreaker(
+    this.producerBreaker = new Opossum(
       async (record: ProducerRecord) => await this.producer.send(record),
       {
         timeout: 5000,

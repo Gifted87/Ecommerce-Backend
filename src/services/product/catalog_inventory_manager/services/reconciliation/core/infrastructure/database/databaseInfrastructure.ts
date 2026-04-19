@@ -1,6 +1,6 @@
 import knex, { Knex } from 'knex';
 import { Logger } from 'pino';
-import CircuitBreaker from 'opossum';
+import Opossum = require('opossum');
 import { z } from 'zod';
 
 /**
@@ -30,7 +30,8 @@ export type DatabaseConfig = z.infer<typeof DbConfigSchema>;
 export class DatabaseService {
   private static instance: DatabaseService;
   private readonly knexInstance: Knex;
-  private readonly breaker: CircuitBreaker<[() => Promise<any>], any>;
+  // Use any to bypass TS namespace issue
+  private readonly breaker: any;
   private readonly logger: Logger;
 
   private constructor(config: DatabaseConfig, logger: Logger) {
@@ -56,7 +57,7 @@ export class DatabaseService {
       debug: false,
     });
 
-    this.breaker = new CircuitBreaker(async (work: () => Promise<any>) => await work(), {
+    this.breaker = new Opossum(async (work: () => Promise<any>) => await work(), {
       timeout: config.statementTimeout,
       errorThresholdPercentage: 50,
       resetTimeout: 30000,

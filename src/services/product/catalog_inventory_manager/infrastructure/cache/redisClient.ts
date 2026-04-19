@@ -1,5 +1,5 @@
 import Redis, { RedisOptions } from 'ioredis';
-import Opossum from 'opossum';
+import Opossum = require('opossum');
 import { Logger } from 'pino';
 
 /**
@@ -33,7 +33,8 @@ export interface RedisHealthStatus {
 export class RedisClient {
   private static instance: RedisClient;
   private client: Redis;
-  private breaker: Opossum;
+  // Use any to bypass TS namespace issue
+  private breaker: any;
   private logger: Logger;
 
   private constructor(logger: Logger) {

@@ -2,7 +2,7 @@ import { Pool } from 'pg';
 import Redis from 'ioredis';
 import { Kafka, Producer, Consumer } from 'kafkajs';
 import pino, { Logger } from 'pino';
-import CircuitBreaker from 'opossum';
+import Opossum = require('opossum');
 import { EventEmitter } from 'events';
 
 /**
@@ -31,7 +31,7 @@ export class ServiceOrchestrator extends EventEmitter {
   private kafkaConsumer: Consumer | null = null;
   private readonly logger: Logger = logger;
 
-  private readonly breakers: Map<string, CircuitBreaker> = new Map();
+  private readonly breakers: Map<string, any> = new Map();
 
   constructor() {
     super();
@@ -93,9 +93,9 @@ export class ServiceOrchestrator extends EventEmitter {
       resetTimeout: 30000,
     };
 
-    this.breakers.set('redis', new CircuitBreaker(async (fn: Function) => fn(), { ...breakerOptions }));
-    this.breakers.set('kafka', new CircuitBreaker(async (fn: Function) => fn(), { ...breakerOptions }));
-    this.breakers.set('db', new CircuitBreaker(async (fn: Function) => fn(), { ...breakerOptions, timeout: 5000 }));
+    this.breakers.set('redis', new Opossum(async (fn: Function) => fn(), { ...breakerOptions }));
+    this.breakers.set('kafka', new Opossum(async (fn: Function) => fn(), { ...breakerOptions }));
+    this.breakers.set('db', new Opossum(async (fn: Function) => fn(), { ...breakerOptions, timeout: 5000 }));
   }
 
   private setupSignalHandlers(): void {

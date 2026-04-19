@@ -5,8 +5,8 @@
  */
 
 export * from './types';
-export { AuthService } from './auth_service';
-export { MfaService } from './mfa_service';
-export { AuthController } from './auth_controller';
-export { MfaController } from './mfa_controller';
-export { AuthMiddleware } from './auth_middleware';
+export { AuthService } from './services/auth.service';
+export { MfaService } from './services/mfa.service';
+export { AuthController } from './controllers/auth.controller';
+export { MfaController } from './controllers/mfa.controller';
+export { createAuthMiddleware } from './middleware/auth.middleware';

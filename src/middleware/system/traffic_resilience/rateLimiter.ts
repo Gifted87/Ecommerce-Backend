@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import Redis from 'ioredis';
 import { RateLimiterRedis, RateLimiterRes } from 'rate-limiter-flexible';
-import Opossum from 'opossum';
+import Opossum = require('opossum');
 import { Logger } from 'pino';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -36,7 +36,8 @@ const DEFAULT_AUTHENTICATED_LIMIT: RateLimitConfig = {
 export class DistributedRateLimiter {
   private redis: Redis;
   private logger: Logger;
-  private breaker: Opossum<[string, number], RateLimiterRes>;
+  // Use any to bypass TS namespace issue
+  private breaker: any;
   private limiters: Map<string, RateLimiterRedis> = new Map();
 
   constructor(redis: Redis, logger: Logger) {
@@ -90,8 +91,8 @@ export class DistributedRateLimiter {
         await this.breaker.fire(key, config.points);
         next();
       } catch (err: any) {
-        if (err instanceof Error && err.name === 'RateLimiterRes') {
-          const rateLimitErr = err as RateLimiterRes;
+        if (err instanceof Error && (err as any).name === 'RateLimiterRes') {
+          const rateLimitErr = err as unknown as RateLimiterRes;
           const retryAfter = Math.round(rateLimitErr.msBeforeNext / 1000) || 1;
 
           this.logger.warn({ correlationId, key, event: 'RATE_LIMIT_EXCEEDED' }, 'Rate limit exceeded');

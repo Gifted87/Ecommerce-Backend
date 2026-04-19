@@ -1,26 +1,22 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { Logger } from 'pino';
-import { v4 as uuidv4 } from 'uuid';
-import { CheckoutProcessorService } from '../../../services/CheckoutProcessorService';
-import { CreateOrderSchema, redactOrderPII } from '../../dtos/OrderDTOs';
+import { CheckoutProcessorService } from '../../../../../services/order/checkout_processor/service/CheckoutProcessorService';
+import { CheckoutRequestSchema } from '../../validation/orderValidation';
+import { OrderErrorMapper } from './order_error_mapper';
 import { ZodError } from 'zod';
 
 /**
- * OrderController handles the incoming HTTP lifecycle for order placement.
- * Enforces strict validation, PII redaction, and error mapping to HTTP status codes.
+ * OrderController handles the incoming HTTP lifecycle for order placement and management.
  */
 export class OrderController {
   constructor(
     private readonly checkoutProcessor: CheckoutProcessorService,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly errorMapper: OrderErrorMapper
   ) {}
 
-  /**
-   * Handles POST /orders
-   * Validates schema, triggers business logic, and ensures observability/security.
-   */
-  public async createOrder(req: Request, res: Response): Promise<void> {
-    const correlationId = (req.headers['x-correlation-id'] as string) || uuidv4();
+  public async createOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const correlationId = (req as any).correlationId;
     const startTime = Date.now();
 
     this.logger.info({
@@ -31,10 +27,9 @@ export class OrderController {
     });
 
     try {
-      // 1. Schema Validation
-      const validationResult = CreateOrderSchema.safeParse(req.body);
+      const validationResult = CheckoutRequestSchema.safeParse(req.body);
       if (!validationResult.success) {
-        this.logError(correlationId, 'Validation failed', validationResult.error);
+        this.logError(req, correlationId, 'Validation failed', validationResult.error);
         res.status(400).json({
           error: 'Bad Request',
           details: validationResult.error.issues,
@@ -43,50 +38,73 @@ export class OrderController {
         return;
       }
 
-      // 2. Business Logic Execution
       const orderData = validationResult.data;
       const result = await this.checkoutProcessor.processCheckout({
         ...orderData,
-        orderId: uuidv4(),
+        orderId: (req as any).correlationId,
+        userId: (req as any).user?.sub,
         correlationId,
       });
 
-      // 3. Success Response
-      this.logCompletion(correlationId, startTime, 201);
+      this.logCompletion(req, correlationId, startTime, 201);
       res.status(201).json({
         data: result,
         meta: { trace_id: correlationId, timestamp: new Date().toISOString() },
       });
     } catch (error: any) {
-      // 4. Error Mapping
-      this.handleError(error, correlationId, startTime, res);
-    } finally {
-      // Ensure connection closure if necessary (handled by express naturally, 
-      // but explicitly referenced for resource cleanup safety)
-      if (!res.writableEnded) {
-        res.end();
-      }
+      next(error);
     }
   }
 
-  private handleError(error: any, correlationId: string, startTime: number, res: Response): void {
-    this.logError(correlationId, 'Checkout process error', error);
-
-    const errorMessage = error.message || 'Internal Server Error';
-    
-    // Map domain-specific errors to HTTP codes
-    if (errorMessage.includes('409') || errorMessage.includes('Conflict')) {
-      res.status(409).json({ error_code: 'CONFLICT', message: errorMessage, trace_id: correlationId });
-    } else if (errorMessage.includes('422') || errorMessage.includes('Invalid')) {
-      res.status(422).json({ error_code: 'UNPROCESSABLE_ENTITY', message: errorMessage, trace_id: correlationId });
-    } else {
-      res.status(500).json({ error_code: 'INTERNAL_ERROR', message: 'An unexpected error occurred', trace_id: correlationId });
+  public async getOrderById(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const { id } = req.params;
+    try {
+        const order = await this.checkoutProcessor.getOrderById(id);
+        res.status(200).json(order);
+    } catch (error: any) {
+        next(error);
     }
-
-    this.logCompletion(correlationId, startTime, res.statusCode);
   }
 
-  private logError(correlationId: string, message: string, error: any): void {
+  public async listOrders(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const correlationId = (req as any).correlationId;
+    const userId = (req as any).user?.sub;
+    try {
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized', correlationId });
+            return;
+        }
+        const orders = await this.checkoutProcessor.listOrdersByUserId(userId);
+        res.status(200).json(orders);
+    } catch (error: any) {
+        next(error);
+    }
+  }
+
+  public async updateOrderStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const correlationId = (req as any).correlationId;
+    const { id } = req.params;
+    const { status } = req.body;
+    try {
+        await this.checkoutProcessor.updateStatus(id, status);
+        res.status(200).json({ message: 'Order status updated', correlationId });
+    } catch (error: any) {
+        next(error);
+    }
+  }
+
+  public async cancelOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const correlationId = (req as any).correlationId;
+    const { id } = req.params;
+    try {
+        await this.checkoutProcessor.updateStatus(id, 'CANCELLED' as any);
+        res.status(200).json({ message: 'Order cancelled', correlationId });
+    } catch (error: any) {
+        next(error);
+    }
+  }
+
+  private logError(req: Request, correlationId: string, message: string, error: any): void {
     const errorDetails = error instanceof ZodError ? error.issues : String(error);
     this.logger.error({
       msg: message,
@@ -95,7 +113,7 @@ export class OrderController {
     });
   }
 
-  private logCompletion(correlationId: string, startTime: number, statusCode: number): void {
+  private logCompletion(req: Request, correlationId: string, startTime: number, statusCode: number): void {
     const duration = Date.now() - startTime;
     this.logger.info({
       msg: 'Request completed',

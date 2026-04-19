@@ -1,16 +1,13 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { Redis } from 'ioredis';
 import { Logger } from 'pino';
-import { 
-  UserRegistrationController, 
-  UserProfileController, 
-  MFAController 
-} from '../controllers';
+import { RegistrationController } from '../controllers/registration/registration.controller';
+import { ProfileController } from '../controllers/profile/profile.controller';
+import { MfaController } from '../controllers/mfa/mfaController';
+import { AuthController } from '../../../../services/user/auth_mfa_module/controllers/auth.controller';
 import { 
   createAuthMiddleware, 
-  correlationMiddleware, 
-  AuthMiddlewareOptions 
-} from '../../middleware';
+} from '../middleware/security/auth.middleware';
 
 /**
  * @fileoverview User API Routing Module.
@@ -20,9 +17,10 @@ import {
 export interface RouterDependencies {
   redis: Redis;
   logger: Logger;
-  userRegistrationController: UserRegistrationController;
-  userProfileController: UserProfileController;
-  mfaController: MFAController;
+  userRegistrationController: RegistrationController;
+  userProfileController: ProfileController;
+  mfaController: MfaController;
+  authController: AuthController;
 }
 
 /**
@@ -35,16 +33,37 @@ export const createUserRouter = (deps: RouterDependencies): Router => {
   const router = Router();
   const authMiddleware = createAuthMiddleware(deps.redis, deps.logger);
 
-  // Apply correlation tracking to all routes
-  router.use(correlationMiddleware);
-
   /**
    * POST /register
    * Bypasses authentication. Registers a new user.
    */
   router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      await deps.userRegistrationController.register(req, res);
+      await deps.userRegistrationController.register(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /login
+   * Authenticates a user and returns a session or MFA challenge.
+   */
+  router.post('/login', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await deps.authController.handleLogin(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /refresh
+   * Rotates an existing JWT session.
+   */
+  router.post('/refresh', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await deps.authController.handleRefresh(req, res, next);
     } catch (error) {
       next(error);
     }
@@ -54,9 +73,9 @@ export const createUserRouter = (deps: RouterDependencies): Router => {
    * GET /profile
    * Requires authenticated user. Retrieves user profile.
    */
-  router.get('/profile', authMiddleware(), async (req: Request, res: Response, next: NextFunction) => {
+  router.get('/profile', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      await deps.userProfileController.getProfile(req, res);
+      await deps.userProfileController.getProfile(req, res, next);
     } catch (error) {
       next(error);
     }
@@ -66,9 +85,9 @@ export const createUserRouter = (deps: RouterDependencies): Router => {
    * PATCH /profile
    * Requires authenticated user. Updates user profile fields.
    */
-  router.patch('/profile', authMiddleware(), async (req: Request, res: Response, next: NextFunction) => {
+  router.patch('/profile', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      await deps.userProfileController.updateProfile(req, res);
+      await deps.userProfileController.updateProfile(req, res, next);
     } catch (error) {
       next(error);
     }
@@ -78,9 +97,9 @@ export const createUserRouter = (deps: RouterDependencies): Router => {
    * POST /mfa/enable
    * Requires authenticated user. Initiates MFA setup process.
    */
-  router.post('/mfa/enable', authMiddleware(), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/mfa/enable', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      await deps.mfaController.enable(req, res);
+      await deps.mfaController.enableMfa(req, res, next);
     } catch (error) {
       next(error);
     }
@@ -90,9 +109,9 @@ export const createUserRouter = (deps: RouterDependencies): Router => {
    * POST /mfa/verify
    * Requires authenticated user. Finalizes MFA activation.
    */
-  router.post('/mfa/verify', authMiddleware(), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/mfa/verify', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      await deps.mfaController.verify(req, res);
+      await deps.mfaController.verifyMfa(req, res, next);
     } catch (error) {
       next(error);
     }

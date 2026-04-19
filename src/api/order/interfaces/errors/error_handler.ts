@@ -25,7 +25,7 @@ export class DomainError extends Error {
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
   redact: {
-    paths: ['password', 'credit_card', 'authorization', 'token', 'cookie', 'set-cookie', 'secret', 'email'],
+    paths: ['password', 'credit_card', 'authorization', 'token', 'cookie', 'secret', 'email'],
     censor: '[REDACTED]'
   },
   base: { service: 'order-api-interface' },

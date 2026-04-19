@@ -1,6 +1,6 @@
 import { Knex } from 'knex';
 import { Logger } from 'pino';
-import CircuitBreaker from 'opossum';
+import Opossum = require('opossum');
 import { z } from 'zod';
 
 /**
@@ -51,7 +51,8 @@ export type Inventory = z.infer<typeof InventorySchema>;
  */
 export class InventoryRepository {
   private readonly tableName = 'inventory';
-  private readonly breaker: CircuitBreaker<[() => Promise<any>], any>;
+  // Use any to bypass TS namespace issue
+  private readonly breaker: any;
 
   constructor(
     private readonly knex: Knex,
@@ -59,7 +60,7 @@ export class InventoryRepository {
   ) {
     this.logger = this.logger.child({ module: 'repository/inventory' });
 
-    this.breaker = new CircuitBreaker(async (fn: () => Promise<any>) => await fn(), {
+    this.breaker = new Opossum(async (fn: () => Promise<any>) => await fn(), {
       timeout: 5000,
       errorThresholdPercentage: 50,
       resetTimeout: 30000,

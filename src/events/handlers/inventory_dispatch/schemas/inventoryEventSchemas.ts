@@ -89,7 +89,7 @@ export class ValidationFailedError extends Error {
 // --- Redaction Utilities ---
 
 export const redactSensitiveData = <T extends Record<string, any>>(data: T): T => {
-  const redacted = { ...data };
+  const redacted = { ...data } as any;
   const sensitiveKeys = ['userId', 'internalToken', 'password', 'authToken', 'secret'];
   
   for (const key of sensitiveKeys) {
@@ -98,5 +98,5 @@ export const redactSensitiveData = <T extends Record<string, any>>(data: T): T =
     }
   }
   
-  return redacted;
+  return redacted as T;
 };

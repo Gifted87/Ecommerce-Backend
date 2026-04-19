@@ -1,149 +1,172 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { Logger } from 'pino';
-import { CartService } from '../service/cart_service';
+import { CartService } from './cart.service';
 import { 
   AddToCartSchema, 
   UpdateQuantitySchema, 
   RemoveItemSchema 
-} from '../validation/cart.schemas';
-import { 
-  CartServiceError, 
-  CartNotFoundError, 
-  CartConcurrencyError, 
-  CartItemValidationError 
-} from '../errors/cart.errors';
-import { CircuitBreaker } from 'opossum';
+} from './cart.schema';
+import Opossum = require('opossum');
 
 /**
  * @fileoverview CartController
  * Orchestrates HTTP requests for cart operations, handling validation,
- * service delegation, error mapping, and observability.
+ * service delegation, and observability.
  */
 
 export class CartController {
   constructor(
     private readonly cartService: CartService,
     private readonly logger: Logger,
-    private readonly breaker: CircuitBreaker<[...any[]], any>
+    // Use any to bypass TS namespace issue
+    private readonly breaker: any
   ) {}
 
-  public async getCart(req: Request, res: Response): Promise<void> {
-    const requestId = req.headers['x-request-id'] as string || 'unknown';
-    const userId = req.headers['x-user-id'] as string;
+  /**
+   * Handles the request to retrieve the current state of a user's cart.
+   * 
+   * This method extracts authentication and correlation context from the request,
+   * then delegates to the CartService via a circuit breaker to ensure resilience.
+   * 
+   * @param req - The Express Request object, including authenticated user and cartId param.
+   * @param res - The Express Response object to send back the JSON cart representation.
+   * @param next - The Express NextFunction to delegate errors to global handler.
+   */
+  public async getCart(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const correlationId = (req as any).correlationId;
+    const userId = (req as any).user?.sub;
     const cartId = req.params.cartId;
 
     if (!userId) {
-      res.status(401).json({ error: 'Unauthorized', requestId });
+      res.status(401).json({ error: 'UNAUTHORIZED', correlationId });
       return;
     }
 
     try {
       const startTime = Date.now();
-      const cart = await this.breaker.fire(async () => await this.cartService.getCart(userId, cartId));
-      this.recordLatency(Date.now() - startTime, 'getCart');
+      const cart = await this.breaker.fire(async () => await this.cartService.getCart(userId, cartId, correlationId));
+      this.recordLatency(Date.now() - startTime, 'getCart', correlationId);
       res.status(200).json(cart);
-    } catch (error) {
-      this.handleError(error, res, requestId, userId, cartId);
+    } catch (error: any) {
+      next(error);
     }
   }
 
-  public async addItem(req: Request, res: Response): Promise<void> {
-    const requestId = req.headers['x-request-id'] as string || 'unknown';
-    const userId = req.headers['x-user-id'] as string;
+  /**
+   * Handles the request to add an item to a user's cart.
+   * 
+   * Validates the request body against the AddToCartSchema and then calls the CartService.
+   * Records operation latency for observability.
+   * 
+   * @param req - The Express Request object containing the item details in the body.
+   * @param res - The Express Response object to send back the updated cart.
+   * @param next - The Express NextFunction for error propagation.
+   */
+  public async addItem(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const correlationId = (req as any).correlationId;
+    const userId = (req as any).user?.sub;
     const cartId = req.params.cartId;
 
     if (!userId) {
-      res.status(401).json({ error: 'Unauthorized', requestId });
+      res.status(401).json({ error: 'UNAUTHORIZED', correlationId });
       return;
     }
 
     const validation = AddToCartSchema.safeParse(req.body);
     if (!validation.success) {
-      res.status(400).json({ error: 'Validation Failed', details: validation.error.format(), requestId });
+      res.status(400).json({ error: 'VALIDATION_FAILED', details: validation.error.format(), correlationId });
       return;
     }
 
     try {
       const startTime = Date.now();
-      const cart = await this.breaker.fire(async () => await this.cartService.addItem(userId, cartId, validation.data));
-      this.recordLatency(Date.now() - startTime, 'addItem');
+      const cart = await this.breaker.fire(async () => await this.cartService.addItem(userId, cartId, validation.data, correlationId));
+      this.recordLatency(Date.now() - startTime, 'addItem', correlationId);
       res.status(200).json(cart);
-    } catch (error) {
-      this.handleError(error, res, requestId, userId, cartId);
+    } catch (error: any) {
+      next(error);
     }
   }
 
-  public async updateQuantity(req: Request, res: Response): Promise<void> {
-    const requestId = req.headers['x-request-id'] as string || 'unknown';
-    const userId = req.headers['x-user-id'] as string;
+  /**
+   * Handles the request to update the quantity of a product in the cart.
+   * 
+   * Validates the request body against the UpdateQuantitySchema and then calls the CartService.
+   * 
+   * @param req - The Express Request object with productId and new quantity in the body.
+   * @param res - The Express Response object with updated cart details.
+   * @param next - The Express NextFunction.
+   */
+  public async updateQuantity(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const correlationId = (req as any).correlationId;
+    const userId = (req as any).user?.sub;
     const cartId = req.params.cartId;
 
     if (!userId) {
-      res.status(401).json({ error: 'Unauthorized', requestId });
+      res.status(401).json({ error: 'UNAUTHORIZED', correlationId });
       return;
     }
 
     const validation = UpdateQuantitySchema.safeParse(req.body);
     if (!validation.success) {
-      res.status(400).json({ error: 'Validation Failed', details: validation.error.format(), requestId });
+      res.status(400).json({ error: 'VALIDATION_FAILED', details: validation.error.format(), correlationId });
       return;
     }
 
     try {
       const startTime = Date.now();
-      const cart = await this.breaker.fire(async () => await this.cartService.updateQuantity(userId, cartId, validation.data));
-      this.recordLatency(Date.now() - startTime, 'updateQuantity');
+      const cart = await this.breaker.fire(async () => await this.cartService.updateQuantity(userId, cartId, validation.data.productId, validation.data.quantity, correlationId));
+      this.recordLatency(Date.now() - startTime, 'updateQuantity', correlationId);
       res.status(200).json(cart);
-    } catch (error) {
-      this.handleError(error, res, requestId, userId, cartId);
+    } catch (error: any) {
+      next(error);
     }
   }
 
-  public async removeItem(req: Request, res: Response): Promise<void> {
-    const requestId = req.headers['x-request-id'] as string || 'unknown';
-    const userId = req.headers['x-user-id'] as string;
+  /**
+   * Handles the request to remove an entire product from the cart.
+   * 
+   * Extracts the productId from the request parameters, validates it, and calls the CartService.
+   * 
+   * @param req - The Express Request object with productId as a URL parameter.
+   * @param res - The Express Response object with updated cart details.
+   * @param next - The Express NextFunction.
+   */
+  public async removeItem(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const correlationId = (req as any).correlationId;
+    const userId = (req as any).user?.sub;
     const cartId = req.params.cartId;
     const productId = req.params.productId;
 
     if (!userId) {
-      res.status(401).json({ error: 'Unauthorized', requestId });
+      res.status(401).json({ error: 'UNAUTHORIZED', correlationId });
       return;
     }
 
     const validation = RemoveItemSchema.safeParse({ productId });
     if (!validation.success) {
-      res.status(400).json({ error: 'Validation Failed', details: validation.error.format(), requestId });
+      res.status(400).json({ error: 'VALIDATION_FAILED', details: validation.error.format(), correlationId });
       return;
     }
 
     try {
       const startTime = Date.now();
-      const cart = await this.breaker.fire(async () => await this.cartService.removeItem(userId, cartId, validation.data.productId));
-      this.recordLatency(Date.now() - startTime, 'removeItem');
+      const cart = await this.breaker.fire(async () => await this.cartService.removeItem(userId, cartId, validation.data.productId, correlationId));
+      this.recordLatency(Date.now() - startTime, 'removeItem', correlationId);
       res.status(200).json(cart);
-    } catch (error) {
-      this.handleError(error, res, requestId, userId, cartId);
+    } catch (error: any) {
+      next(error);
     }
   }
 
-  private handleError(error: any, res: Response, requestId: string, userId?: string, cartId?: string): void {
-    this.logger.error({ error, requestId, userId, cartId }, 'Cart operation failed');
-
-    if (error instanceof CartNotFoundError) {
-      res.status(404).json({ error: error.message, code: error.errorCode, requestId });
-    } else if (error instanceof CartConcurrencyError) {
-      res.status(409).json({ error: 'Conflict: Please retry your request', code: error.errorCode, requestId });
-    } else if (error instanceof CartItemValidationError) {
-      res.status(422).json({ error: error.message, code: error.errorCode, requestId });
-    } else if (error.code === 'EOPENBREAKER') {
-      res.status(503).json({ error: 'Service Unavailable: Circuit Open', requestId });
-    } else {
-      res.status(500).json({ error: 'Internal Server Error', requestId });
-    }
-  }
-
-  private recordLatency(durationMs: number, operation: string): void {
-    // Integration with centralized monitoring system
-    this.logger.info({ operation, durationMs }, 'Operation latency tracked');
+  /**
+   * Logs the time taken to perform a specific cart operation for monitoring purposes.
+   * 
+   * @param durationMs - The duration of the operation in milliseconds.
+   * @param operation - The name of the operation being recorded.
+   * @param correlationId - The unique ID for tracing this request's lifecycle.
+   */
+  private recordLatency(durationMs: number, operation: string, correlationId: string): void {
+    this.logger.info({ operation, durationMs, correlationId }, 'Operation latency tracked');
   }
 }

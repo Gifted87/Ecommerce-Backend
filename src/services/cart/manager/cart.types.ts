@@ -1,35 +1,51 @@
 /**
- * @fileoverview Domain-driven TypeScript interface suite for the Shopping Cart and Session Management service.
- * These interfaces define the contract for high-concurrency state persistence in Redis, 
- * ensuring type safety, financial precision, and auditability.
+ * @fileoverview Internal contract definitions for the Cart Service.
+ * This module defines the domain models, state machine, and communication contracts
+ * for the high-concurrency Shopping Cart management system.
+ * 
+ * Financial fields are strictly typed as bigint to ensure precision.
  */
 
 /**
- * UUID representation type.
+ * UUID v4 representation.
  */
 export type UUID = string;
 
 /**
- * ISO 8601 Date string.
+ * ISO 8601 formatted date-time string.
  */
 export type ISO8601Date = string;
 
 /**
- * Represents an individual item in the shopping cart.
- * Uses bigint for currency to prevent floating-point rounding errors.
+ * Supported Cart lifecycle states.
+ */
+export enum CartStatus {
+  /** Initial state for guest users or brand new sessions. */
+  ACTIVE = 'ACTIVE',
+  /** Cart is transitioning to order completion. */
+  PENDING_CHECKOUT = 'PENDING_CHECKOUT',
+  /** Cart has been successfully converted to an order. */
+  PURCHASED = 'PURCHASED',
+  /** Cart has reached its expiry TTL without action. */
+  ABANDONED = 'ABANDONED',
+}
+
+/**
+ * Represents a line item in the shopping cart.
  */
 export interface CartItem {
   readonly productId: UUID;
   readonly sku: string;
   quantity: number;
-  readonly pricePerUnit: bigint; // Stored in minor currency units (e.g., cents)
-  readonly currency: string; // ISO 4217 code (e.g., 'USD')
+  /** Price in minor currency units (e.g., cents for USD). */
+  readonly pricePerUnit: bigint;
+  readonly currency: string;
   readonly addedAt: ISO8601Date;
   updatedAt: ISO8601Date;
 }
 
 /**
- * Represents the summarized financial state of a cart.
+ * Summarized financial state of the cart.
  */
 export interface CartSummary {
   readonly subtotal: bigint;
@@ -40,17 +56,7 @@ export interface CartSummary {
 }
 
 /**
- * Defines the state of the shopping cart.
- */
-export enum CartStatus {
-  ACTIVE = 'ACTIVE',
-  PENDING_CHECKOUT = 'PENDING_CHECKOUT',
-  ABANDONED = 'ABANDONED',
-  PURCHASED = 'PURCHASED',
-}
-
-/**
- * Core Shopping Cart entity.
+ * Core Shopping Cart entity stored in Redis.
  */
 export interface Cart {
   readonly cartId: UUID;
@@ -61,43 +67,41 @@ export interface Cart {
   readonly createdAt: ISO8601Date;
   updatedAt: ISO8601Date;
   
-  // Distributed locking and consistency metadata
-  readonly lockId: UUID; // Identifier for Redis lock acquisition
-  readonly version: number; // Optimistic locking version counter
+  /** Distributed locking and consistency metadata. */
+  readonly lockId: UUID;
+  /** Optimistic concurrency version counter. */
+  readonly version: number;
   
-  // Traceability metadata
+  /** Traceability metadata. */
   readonly correlationId: UUID;
   readonly requestId: UUID;
 }
 
 /**
- * Metadata for user session, containing ephemeral authentication state.
+ * Request contract for merging a guest cart into a user's persistent cart.
  */
-export interface SessionMetadata {
-  readonly sessionId: UUID;
-  readonly userId: UUID;
-  readonly createdAt: ISO8601Date;
-  expiresAt: ISO8601Date;
-  
-  /** 
-   * Cryptographic fingerprinting for session hijacking prevention.
-   * Marked for redaction in logs.
-   */
-  readonly sessionFingerprint: string; 
-  
-  // Traceability metadata
+export interface MergeOperationRequest {
+  readonly guestCartId: UUID;
+  readonly userCartId: UUID;
   readonly correlationId: UUID;
-  
-  // Additional context
-  readonly userAgent: string;
-  readonly ipAddress: string;
 }
 
 /**
- * Type Guard to validate if an object conforms to the Cart structure.
+ * Response contract for the merge operation.
+ */
+export interface MergeOperationResponse {
+  readonly success: boolean;
+  readonly mergedCart: Cart | null;
+  readonly error?: string;
+}
+
+/**
+ * Type guard for Cart entity.
  */
 export function isCart(obj: any): obj is Cart {
   return (
+    typeof obj === 'object' &&
+    obj !== null &&
     typeof obj.cartId === 'string' &&
     Array.isArray(obj.items) &&
     typeof obj.summary === 'object' &&
@@ -108,12 +112,15 @@ export function isCart(obj: any): obj is Cart {
 }
 
 /**
- * Type Guard to validate if an object conforms to the SessionMetadata structure.
+ * Type guard for CartItem entity.
  */
-export function isSessionMetadata(obj: any): obj is SessionMetadata {
+export function isCartItem(obj: any): obj is CartItem {
   return (
-    typeof obj.sessionId === 'string' &&
-    typeof obj.userId === 'string' &&
-    typeof obj.sessionFingerprint === 'string'
+    typeof obj === 'object' &&
+    obj !== null &&
+    typeof obj.productId === 'string' &&
+    typeof obj.sku === 'string' &&
+    typeof obj.quantity === 'number' &&
+    typeof obj.pricePerUnit === 'bigint'
   );
 }

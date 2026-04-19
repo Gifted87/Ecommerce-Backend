@@ -1,5 +1,5 @@
 import Redis, { RedisOptions, ChainableCommander } from 'ioredis';
-import Opossum from 'opossum';
+import Opossum = require('opossum');
 
 /**
  * Custom error class for Redis operations
@@ -26,7 +26,8 @@ export interface RedisHealthStatus {
 export class RedisClient {
   private static instance: RedisClient;
   private client: Redis;
-  private breaker: Opossum;
+  // Use any to bypass TS namespace issue
+  private breaker: any;
 
   private constructor() {
     const options: RedisOptions = {

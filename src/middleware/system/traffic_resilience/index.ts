@@ -1,10 +1,10 @@
-import { Request, Response, NextFunction, RequestHandler } from 'express';
+import { Request, Response, NextFunction, RequestHandler, ErrorRequestHandler } from 'express';
 import Redis from 'ioredis';
 import pino, { Logger } from 'pino';
 import { v4 as uuidv4 } from 'uuid';
 import createError, { HttpError } from 'http-errors';
-import { DistributedRateLimiter } from './distributed_rate_limiter';
-import { globalErrorMiddleware } from './global_error_handler';
+import { DistributedRateLimiter } from './rateLimiter';
+import { globalErrorMiddleware } from './errorMiddleware';
 
 /**
  * Interface defining the configuration for the ResilienceMiddlewareStack.
@@ -50,11 +50,11 @@ export class ResilienceMiddlewareStack {
    * Returns a composite middleware stack for application integration.
    * Includes correlation ID injection, rate limiting, and global error handling.
    */
-  public get stack(): RequestHandler[] {
+  public get stack(): (RequestHandler | ErrorRequestHandler)[] {
     return [
       this.correlationMiddleware,
       this.rateLimiter.middleware(),
-      globalErrorMiddleware,
+      globalErrorMiddleware as ErrorRequestHandler,
     ];
   }
 

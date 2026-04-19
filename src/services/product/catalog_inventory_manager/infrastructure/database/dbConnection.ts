@@ -1,6 +1,6 @@
 import knex, { Knex } from 'knex';
 import { Logger } from 'pino';
-import CircuitBreaker from 'opossum';
+import Opossum = require('opossum');
 import { z } from 'zod';
 
 /**
@@ -26,7 +26,8 @@ const DbConfigSchema = z.object({
 export class DatabaseService {
   private static instance: DatabaseService;
   private knexInstance: Knex;
-  private breaker: CircuitBreaker;
+  // Use any to bypass TS namespace issue
+  private breaker: any;
   private logger: Logger;
 
   private constructor(config: z.infer<typeof DbConfigSchema>, logger: Logger) {
@@ -52,7 +53,7 @@ export class DatabaseService {
     });
 
     // Configure circuit breaker for database operations
-    this.breaker = new CircuitBreaker(
+    this.breaker = new Opossum(
       async (queryFn: () => Promise<any>) => await queryFn(),
       {
         timeout: config.statementTimeout,

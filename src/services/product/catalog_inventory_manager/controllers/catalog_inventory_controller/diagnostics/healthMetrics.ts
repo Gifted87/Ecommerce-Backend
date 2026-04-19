@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 import Redis from 'ioredis';
 import { Kafka, Admin } from 'kafkajs';
-import Opossum from 'opossum';
+import Opossum = require('opossum');
 import { Registry, Gauge, Counter, Histogram } from 'prom-client';
 import { z } from 'zod';
 import pino from 'pino';
@@ -52,7 +52,8 @@ export const eventLoopLag = new Gauge({
 // --- Diagnostics Service ---
 
 export class HealthMonitorService {
-  private readonly breakers: Record<string, Opossum>;
+  // Use any to bypass TS namespace issue
+  private readonly breakers: Record<string, any>;
 
   constructor(
     private readonly db: Pool,

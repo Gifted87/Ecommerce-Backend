@@ -8,6 +8,18 @@ def is_text_file(file_path):
     """
     # 1. Ignore specific binary extensions immediately
     binary_extensions = {
+        # Images
+        '.png', '.jpg', '.jpeg', '.gif', '.ico', '.svg', '.webp',
+        # Compiled / Executables
+        '.pyc', '.pyo', '.exe', '.dll', '.so', '.o', '.a', '.bin',
+        # Archives
+        '.zip', '.tar', '.gz', '.7z', '.rar',
+        # Elixir / Erlang compiled
+        '.beam', '.ez', '.dcd', # Added .dcd based on your logs (Mnesia)
+        # Documents
+        '.pdf', '.docx', '.xlsx',
+        # Database
+        '.db', '.sqlite', '.sqlite3'
     }
     
     _, ext = os.path.splitext(file_path)
@@ -33,6 +45,26 @@ def compile_codebase_to_text(root_dir, output_file):
     
     # Configuration: Directory names to ignore (exact matches)
     ignored_dirs = {
+        "_build", 
+        "deps", 
+        "tmp",
+        "test",
+        "tests",
+        "reports",
+        "samples",
+        "__pycache__",
+        "node_modules",
+        ".git",
+        ".idea",
+        ".vscode",
+        "venv311",
+        "env",
+        "venv",
+	"dist",
+	".acn",
+	".git"
+	".procoder",
+	".cdms_model"
     }
 
     # Files to specifically ignore (exact matches)
@@ -40,7 +72,9 @@ def compile_codebase_to_text(root_dir, output_file):
         "compiled_codebase.txt", 
         "consolidator.py",
         "package-lock.json",
-        "yarn.lock"
+        "yarn.lock",
+	"output.log",
+	"package-log.json"
     }
 
     file_count = 0

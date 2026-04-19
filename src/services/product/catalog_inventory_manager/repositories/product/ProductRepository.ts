@@ -1,7 +1,7 @@
 import { Knex } from 'knex';
 import { Logger } from 'pino';
-import { DatabaseRepository, RepositoryError } from '../base/DatabaseRepository';
-import { Product, ProductSchema } from '../../domain/Product';
+import { DatabaseRepository, RepositoryError } from '../../../../../shared/database/repository';
+import { Product, ProductSchema } from '../../schemas/domain';
 import { z } from 'zod';
 
 /**

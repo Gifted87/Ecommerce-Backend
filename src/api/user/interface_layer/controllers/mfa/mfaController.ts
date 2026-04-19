@@ -1,18 +1,14 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { Logger } from 'pino';
 import { z } from 'zod';
-import { MfaService } from '../../services/mfaService';
+import { MfaService } from '../../../../../services/user/auth_mfa_module/services/mfa.service';
 
-/**
- * Validation schema for MFA verification input.
- */
 const MfaVerifySchema = z.object({
   token: z.string().length(6, 'TOTP token must be 6 digits'),
 });
 
 /**
  * MfaController handles Multi-Factor Authentication lifecycle requests.
- * Acts as an interface layer, delegating business logic to MfaService.
  */
 export class MfaController {
   constructor(
@@ -20,25 +16,18 @@ export class MfaController {
     private readonly logger: Logger
   ) {}
 
-  /**
-   * Generates a new MFA secret for the authenticated user and returns a QR code.
-   * Requires: Authenticated session.
-   * 
-   * @param req - Express Request object containing user context.
-   * @param res - Express Response object.
-   */
-  async enableMfa(req: Request, res: Response): Promise<void> {
-    const correlationId = (req.headers['x-correlation-id'] as string) || 'unknown';
-    const userId = req.user?.sub;
+  async enableMfa(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const correlationId = (req as any).correlationId;
+    const userId = (req as any).user?.sub;
 
     if (!userId) {
-      res.status(401).json({ code: 'UNAUTHORIZED', message: 'Authentication required' });
+      res.status(401).json({ code: 'UNAUTHORIZED', message: 'Authentication required', correlationId });
       return;
     }
 
     try {
       const mfaSecret = await this.mfaService.generateSecret(userId);
-      const qrCode = await this.mfaService.createQrCode(mfaSecret.mfa_secret, req.user!.email);
+      const qrCode = await this.mfaService.createQrCode(mfaSecret.mfa_secret, (req as any).user!.email);
 
       this.logger.info({ correlationId, userId }, 'MFA enablement requested');
 
@@ -46,32 +35,25 @@ export class MfaController {
         mfa_id: mfaSecret.mfa_id,
         qr_code: qrCode,
         message: 'MFA setup initialized. Please scan the QR code and verify.',
+        correlationId
       });
-    } catch (error) {
-      this.logger.error({ correlationId, userId, error }, 'Failed to initialize MFA setup');
-      res.status(500).json({ code: 'INTERNAL_SERVER_ERROR', message: 'An unexpected error occurred during MFA initialization.' });
+    } catch (error: any) {
+      next(error);
     }
   }
 
-  /**
-   * Verifies the user-submitted TOTP code and completes the MFA binding.
-   * Requires: Authenticated session, PENDING MFA state.
-   * 
-   * @param req - Express Request object.
-   * @param res - Express Response object.
-   */
-  async verifyMfa(req: Request, res: Response): Promise<void> {
-    const correlationId = (req.headers['x-correlation-id'] as string) || 'unknown';
-    const userId = req.user?.sub;
+  async verifyMfa(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const correlationId = (req as any).correlationId;
+    const userId = (req as any).user?.sub;
 
     if (!userId) {
-      res.status(401).json({ code: 'UNAUTHORIZED', message: 'Authentication required' });
+      res.status(401).json({ code: 'UNAUTHORIZED', message: 'Authentication required', correlationId });
       return;
     }
 
     const validation = MfaVerifySchema.safeParse(req.body);
     if (!validation.success) {
-      res.status(400).json({ code: 'INVALID_INPUT', errors: validation.error.format() });
+      res.status(400).json({ code: 'INVALID_INPUT', errors: validation.error.format(), correlationId });
       return;
     }
 
@@ -81,14 +63,13 @@ export class MfaController {
 
       if (isValid) {
         this.logger.info({ correlationId, userId }, 'MFA successfully verified');
-        res.status(200).json({ message: 'MFA verified and enabled successfully.' });
+        res.status(200).json({ message: 'MFA verified and enabled successfully.', correlationId });
       } else {
         this.logger.warn({ correlationId, userId }, 'MFA verification failed: Invalid token');
-        res.status(403).json({ code: 'INVALID_MFA_TOKEN', message: 'The provided MFA token is invalid.' });
+        res.status(403).json({ code: 'INVALID_MFA_TOKEN', message: 'The provided MFA token is invalid.', correlationId });
       }
-    } catch (error) {
-      this.logger.error({ correlationId, userId, error }, 'MFA verification process crashed');
-      res.status(500).json({ code: 'INTERNAL_SERVER_ERROR', message: 'An internal error occurred during MFA verification.' });
+    } catch (error: any) {
+      next(error);
     }
   }
 }

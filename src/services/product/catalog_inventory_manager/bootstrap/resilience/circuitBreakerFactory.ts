@@ -1,4 +1,4 @@
-import CircuitBreaker from 'opossum';
+import Opossum = require('opossum');
 import { Logger } from 'pino';
 import { z } from 'zod';
 
@@ -37,10 +37,10 @@ export class CircuitBreakerFactory {
     action: (...args: A) => Promise<T>,
     fallback: (err: Error, ...args: A) => Promise<T>,
     config?: Partial<CircuitBreakerConfig>
-  ): CircuitBreaker {
+  ): any {
     const validatedConfig = CircuitBreakerConfigSchema.parse(config || {});
     
-    const breaker = new CircuitBreaker(action, {
+    const breaker = new Opossum(action, {
       timeout: validatedConfig.timeout,
       errorThresholdPercentage: validatedConfig.errorThresholdPercentage,
       resetTimeout: validatedConfig.resetTimeout,

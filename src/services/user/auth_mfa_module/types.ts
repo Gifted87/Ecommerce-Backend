@@ -1,8 +1,76 @@
+import { z } from 'zod';
+
 /**
  * @fileoverview Definitive type contract for the Authentication and Multi-Factor Authentication (MFA) sub-system.
  * Provides strictly enforced interfaces for session management, MFA configuration, and JWT payloads
  * to ensure data integrity across the distributed microservices architecture.
  */
+
+/**
+ * User Model Schema
+ */
+export const UserModelSchema = z.object({
+  user_id: z.string().uuid(),
+  email: z.string().email(),
+  password_hash: z.string(),
+  first_name: z.string().min(1),
+  last_name: z.string().min(1),
+  roles: z.array(z.string()),
+  is_active: z.boolean(),
+  mfa_enabled: z.boolean(),
+  mfa_secret: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export type UserModel = z.infer<typeof UserModelSchema>;
+
+/**
+ * Public User interface (PII redacted)
+ */
+export interface PublicUser {
+  user_id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  roles: string[];
+  mfa_enabled: boolean;
+}
+
+/**
+ * Mapper function for public user profile
+ */
+export const toPublicUser = (user: UserModel): PublicUser => ({
+  user_id: user.user_id,
+  email: user.email,
+  first_name: user.first_name,
+  last_name: user.last_name,
+  roles: user.roles,
+  mfa_enabled: user.mfa_enabled,
+});
+
+/**
+ * User Registration Schema
+ */
+export const UserRegistrationSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+  first_name: z.string().min(1),
+  last_name: z.string().min(1),
+});
+
+export type UserRegistration = z.infer<typeof UserRegistrationSchema>;
+
+/**
+ * User Profile Update Schema
+ */
+export const UserUpdateSchema = z.object({
+  first_name: z.string().min(1).optional(),
+  last_name: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+});
+
+export type UserUpdate = z.infer<typeof UserUpdateSchema>;
 
 /**
  * Defines the current state of the MFA workflow for a user.

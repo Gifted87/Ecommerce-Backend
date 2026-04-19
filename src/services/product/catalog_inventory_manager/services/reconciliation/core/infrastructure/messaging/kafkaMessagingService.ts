@@ -1,5 +1,5 @@
-import { Kafka, Producer, Consumer, ProducerRecord, EachMessagePayload, SASLMechanism } from 'kafkajs';
-import CircuitBreaker from 'opossum';
+import { Kafka, Producer, Consumer, ProducerRecord, EachMessagePayload } from 'kafkajs';
+import Opossum = require('opossum');
 import { z } from 'zod';
 import { Logger } from 'pino';
 import { createHmac } from 'crypto';
@@ -29,7 +29,8 @@ export type KafkaClientConfig = z.infer<typeof KafkaConfigSchema>;
 export class KafkaMessagingService {
   private readonly kafka: Kafka;
   private readonly producer: Producer;
-  private readonly producerBreaker: CircuitBreaker;
+  // Use any to bypass TS namespace issue
+  private readonly producerBreaker: any;
   private readonly logger: Logger;
   private readonly hmacSecret: string;
   private readonly dlqTopic = 'inventory-reconciliation-dlq';
@@ -44,10 +45,10 @@ export class KafkaMessagingService {
       brokers: validatedConfig.brokers,
       ssl: validatedConfig.ssl,
       sasl: validatedConfig.sasl ? {
-        mechanism: validatedConfig.sasl.mechanism as SASLMechanism,
+        mechanism: validatedConfig.sasl.mechanism as any,
         username: validatedConfig.sasl.username,
         password: validatedConfig.sasl.password,
-      } : undefined,
+      } as any : undefined,
     });
 
     this.producer = this.kafka.producer({
@@ -55,7 +56,7 @@ export class KafkaMessagingService {
       maxInFlightRequests: 5,
     });
 
-    this.producerBreaker = new CircuitBreaker(
+    this.producerBreaker = new Opossum(
       async (record: ProducerRecord) => await this.producer.send(record),
       {
         timeout: 5000,

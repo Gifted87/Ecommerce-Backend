@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+reports/
+ecommerce_compiled_codebase.txt
+output.log
+*.rej
+.acn/
+.cdms_model/
+.procoder/
+coverage/
+*.log

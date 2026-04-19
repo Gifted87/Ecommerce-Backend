@@ -2,7 +2,7 @@ import { Logger } from 'pino';
 import { Knex } from 'knex';
 import Redis from 'ioredis';
 import { Kafka, Producer, Consumer } from 'kafkajs';
-import CircuitBreaker from 'opossum';
+import Opossum = require('opossum');
 import { z } from 'zod';
 
 /**
@@ -22,8 +22,10 @@ type InventoryEvent = z.infer<typeof InventoryEventSchema>;
  * between PostgreSQL and Kafka event streams for inventory management.
  */
 export class ReconciliationWorker {
-  private readonly dbBreaker: CircuitBreaker;
-  private readonly kafkaBreaker: CircuitBreaker;
+  // Use any to bypass TS namespace issue
+  private readonly dbBreaker: any;
+  // Use any to bypass TS namespace issue
+  private readonly kafkaBreaker: any;
 
   constructor(
     private readonly db: Knex,
@@ -38,8 +40,8 @@ export class ReconciliationWorker {
       resetTimeout: 30000,
     };
 
-    this.dbBreaker = new CircuitBreaker(async (fn: () => Promise<any>) => await fn(), breakerOptions);
-    this.kafkaBreaker = new CircuitBreaker(async (fn: () => Promise<any>) => await fn(), breakerOptions);
+    this.dbBreaker = new Opossum(async (fn: () => Promise<any>) => await fn(), breakerOptions);
+    this.kafkaBreaker = new Opossum(async (fn: () => Promise<any>) => await fn(), breakerOptions);
   }
 
   /**

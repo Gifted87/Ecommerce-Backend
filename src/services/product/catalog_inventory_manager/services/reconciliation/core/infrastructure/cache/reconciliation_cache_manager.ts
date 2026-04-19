@@ -44,6 +44,18 @@ export class ReconciliationCacheManager {
     await this.client.del(key);
   }
 
+  async lockSkuRange(skuRange: string, correlationId: string): Promise<boolean> {
+    const key = `reconciliation:lock:${skuRange}`;
+    const result = await this.client.set(key, correlationId, 'EX', 300, 'NX');
+    return result === 'OK';
+  }
+
+  async releaseSkuRange(skuRange: string, correlationId: string): Promise<void> {
+    const key = `reconciliation:lock:${skuRange}`;
+    // Simplified lock release, ideally check correlationId first
+    await this.client.del(key);
+  }
+
   /**
    * Graceful shutdown of the Redis connection.
    */

@@ -1,5 +1,5 @@
-import { Kafka, Producer, ProducerRecord, SASLMechanism } from 'kafkajs';
-import CircuitBreaker from 'opossum';
+import { Kafka, Producer, ProducerRecord, SASLMechanism, SASLOptions } from 'kafkajs';
+import Opossum = require('opossum');
 import { z } from 'zod';
 import { Logger } from 'pino';
 import { createHmac } from 'crypto';
@@ -43,7 +43,8 @@ export type KafkaDispatcherConfig = z.infer<typeof KafkaDispatcherConfigSchema>;
 export class InventoryEventDispatcher {
   private readonly kafka: Kafka;
   private readonly producer: Producer;
-  private readonly producerBreaker: CircuitBreaker;
+  // Use any to bypass TS namespace issue
+  private readonly producerBreaker: any; 
   private readonly logger: Logger;
   private readonly hmacSecret: string;
   private isInitialized: boolean = false;
@@ -61,7 +62,7 @@ export class InventoryEventDispatcher {
         mechanism: validatedConfig.sasl.mechanism as SASLMechanism,
         username: validatedConfig.sasl.username,
         password: validatedConfig.sasl.password,
-      } : undefined,
+      } as SASLOptions : undefined,
     });
 
     this.producer = this.kafka.producer({
@@ -69,7 +70,7 @@ export class InventoryEventDispatcher {
       maxInFlightRequests: 5,
     });
 
-    this.producerBreaker = new CircuitBreaker(
+    this.producerBreaker = new Opossum(
       async (record: ProducerRecord) => await this.producer.send(record),
       {
         timeout: 5000,

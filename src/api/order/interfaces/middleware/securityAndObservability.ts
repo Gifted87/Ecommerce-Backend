@@ -33,7 +33,7 @@ declare global {
     interface Request {
       user?: TokenPayload;
       session_id?: string;
-      correlationId: string;
+      correlationId?: string;
       log: Logger;
     }
   }

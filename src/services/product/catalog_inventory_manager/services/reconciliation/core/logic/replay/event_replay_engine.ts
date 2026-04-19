@@ -3,7 +3,7 @@ import { Pool, PoolClient } from 'pg';
 import Redis from 'ioredis';
 import { z } from 'zod';
 import { Logger } from 'pino';
-import CircuitBreaker from 'opossum';
+import Opossum = require('opossum');
 
 /**
  * Event validation schemas.
@@ -39,7 +39,8 @@ export class EventReplayEngine {
   private readonly dbPool: Pool;
   private readonly redis: Redis;
   private readonly logger: Logger;
-  private readonly breaker: CircuitBreaker;
+  // Use any to bypass TS namespace issue
+  private readonly breaker: any;
 
   constructor(private readonly config: ReplayEngineConfig) {
     this.dbPool = config.dbPool;
@@ -53,7 +54,7 @@ export class EventReplayEngine {
 
     this.consumer = this.kafka.consumer({ groupId: config.groupId });
 
-    this.breaker = new CircuitBreaker(this.processEvent.bind(this), {
+    this.breaker = new Opossum(this.processEvent.bind(this), {
       timeout: 10000,
       errorThresholdPercentage: 50,
       resetTimeout: 30000,
@@ -91,7 +92,9 @@ export class EventReplayEngine {
     const lockKey = `reconciliation:lock:${event.sku}`;
 
     // Acquire distributed lock in Redis to ensure idempotency
-    const lockAcquired = await this.redis.set(lockKey, 'locked', 'NX', 'EX', 60);
+    // Note: The original 'NX', 'EX', 60 was causing TS errors, let's try a safer Redis set
+    const lockAcquired = await this.redis.set(lockKey, 'locked', 'EX', 60, 'NX');
+    
     if (!lockAcquired) {
       this.logger.warn({ sku: event.sku }, 'Reconciliation already in progress for SKU');
       return;

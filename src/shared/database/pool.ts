@@ -1,4 +1,4 @@
-import { Pool, PoolClient, QueryResult, QueryConfig, PoolConfig } from 'pg';
+import { Pool, PoolClient, QueryResult, QueryConfig, PoolConfig, QueryResultRow } from 'pg';
 import { Logger } from 'winston';
 import * as winston from 'winston';
 
@@ -71,7 +71,7 @@ export class DatabasePool {
    * @param values Query parameters.
    * @returns Promise resolving to the QueryResult.
    */
-  public async query<T = any>(queryText: string | QueryConfig, values?: any[]): Promise<QueryResult<T>> {
+  public async query<T extends QueryResultRow = any>(queryText: string | QueryConfig, values?: any[]): Promise<QueryResult<T>> {
     const start = Date.now();
     try {
       const res = await this.pool.query(queryText, values);

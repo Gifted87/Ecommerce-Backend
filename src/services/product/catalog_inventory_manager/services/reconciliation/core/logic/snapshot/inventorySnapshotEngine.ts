@@ -1,8 +1,8 @@
 import { Knex } from 'knex';
 import { Logger } from 'pino';
-import CircuitBreaker from 'opossum';
+import Opossum = require('opossum');
 import Redis from 'ioredis';
-import { InventorySnapshotSchema, InventorySnapshot } from '../schemas';
+import { InventorySnapshotSchema, InventorySnapshot } from '../../schemas/inventorySchemas';
 
 /**
  * Custom error class for snapshot engine operations.
@@ -20,7 +20,8 @@ export class InventorySnapshotEngineError extends Error {
  */
 export class InventorySnapshotEngine {
   private readonly tableName = 'inventory';
-  private readonly breaker: CircuitBreaker;
+  // Use any to bypass TS namespace issue
+  private readonly breaker: any;
 
   constructor(
     private readonly knex: Knex,
@@ -30,7 +31,7 @@ export class InventorySnapshotEngine {
     this.logger = this.logger.child({ module: 'services/reconciliation/snapshot_engine' });
 
     // Circuit breaker configuration for database and redis operations
-    this.breaker = new CircuitBreaker(async (fn: () => Promise<any>) => await fn(), {
+    this.breaker = new Opossum(async (fn: () => Promise<any>) => await fn(), {
       timeout: 5000,
       errorThresholdPercentage: 50,
       resetTimeout: 30000,
@@ -48,7 +49,7 @@ export class InventorySnapshotEngine {
     const lockKey = `reconciliation:lock:inventory:${startSku}:${endSku}`;
     
     // Acquire distributed lock to prevent overlapping runs
-    const lockAcquired = await this.redis.set(lockKey, 'locked', 'NX', 'EX', 3600);
+    const lockAcquired = await this.redis.set(lockKey, 'locked', 'EX', 3600, 'NX');
     if (!lockAcquired) {
       throw new InventorySnapshotEngineError('Reconciliation already in progress for this range', 'LOCK_ACQUIRED_ERROR');
     }

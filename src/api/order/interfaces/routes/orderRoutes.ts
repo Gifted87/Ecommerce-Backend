@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import CircuitBreaker from 'opossum';
 import { Logger } from 'pino';
 import { z } from 'zod';
+import { OrderRequestSchema } from '../../../../domain/order/schemas/orderSchemas';
 
 // Interfaces for injected dependencies
 export interface OrderRouterDependencies {
@@ -33,16 +33,6 @@ export const createOrderRouter = (deps: OrderRouterDependencies): Router => {
   // Global Middleware
   router.use(correlationMiddleware);
 
-  // Circuit Breaker for Order Fetching
-  const getOrderBreaker = new CircuitBreaker(
-    (id: string) => orderController.getOrderById(id),
-    {
-      timeout: 5000,
-      errorThresholdPercentage: 50,
-      resetTimeout: 30000,
-    }
-  );
-
   /**
    * POST /orders
    * Initiates order checkout.
@@ -51,7 +41,7 @@ export const createOrderRouter = (deps: OrderRouterDependencies): Router => {
     '/',
     authMiddleware(),
     rbacMiddleware(['order:write']),
-    // validateSchema(OrderRequestSchema),
+    validateSchema(OrderRequestSchema),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         await orderController.createOrder(req, res);
@@ -80,7 +70,7 @@ export const createOrderRouter = (deps: OrderRouterDependencies): Router => {
 
   /**
    * GET /orders/:id
-   * Retrieves order details with circuit breaking.
+   * Retrieves order details.
    */
   router.get(
     '/:id',
@@ -88,8 +78,7 @@ export const createOrderRouter = (deps: OrderRouterDependencies): Router => {
     rbacMiddleware(['order:read']),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const order = await getOrderBreaker.fire(req.params.id);
-        res.status(200).json(order);
+        await orderController.getOrderById(req, res);
       } catch (error) {
         next(error);
       }

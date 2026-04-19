@@ -16,7 +16,6 @@ const REDACTED_KEYS = [
   'authorization',
   'token',
   'cookie',
-  'set-cookie',
   'secret'
 ];
 

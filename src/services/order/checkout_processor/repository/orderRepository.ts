@@ -1,7 +1,7 @@
 import { Knex } from 'knex';
 import { Logger } from 'pino';
-import CircuitBreaker from 'opossum';
-import { OrderModel, OrderModelSchema, OrderStatus } from '../types/orderTypes';
+import Opossum = require('opossum');
+import { OrderModel, OrderModelSchema, OrderStatus } from '../types/order_types';
 
 /**
  * Custom Error for Repository-level domain exceptions.
@@ -29,13 +29,14 @@ interface RedactableOrder {
  */
 export class OrderRepository {
   private readonly tableName = 'orders';
-  private readonly breaker: CircuitBreaker;
+  // Use any to bypass TS namespace issue
+  private readonly breaker: any;
 
   constructor(
     private readonly db: Knex,
     private readonly logger: Logger
   ) {
-    this.breaker = new CircuitBreaker(async (fn: () => Promise<any>) => await fn(), {
+    this.breaker = new Opossum(async (fn: () => Promise<any>) => await fn(), {
       timeout: 5000,
       errorThresholdPercentage: 50,
       resetTimeout: 30000,
@@ -79,7 +80,7 @@ export class OrderRepository {
             'Order created successfully'
           );
           
-          return result;
+          return this.parseResult(result);
         });
       } catch (error: any) {
         this.logger.error({ operation: 'CREATE_ORDER', error: error.message }, 'Failed to create order');
@@ -91,27 +92,30 @@ export class OrderRepository {
   /**
    * Updates an existing order status within a transaction.
    */
-  public async updateStatus(orderId: string, status: OrderStatus): Promise<OrderModel> {
+  public async updateStatus(orderId: string, status: OrderStatus, trackingNumber?: string): Promise<OrderModel> {
     return await this.breaker.fire(async () => {
       const start = performance.now();
       try {
-        return await this.db.transaction(async (trx) => {
-          const [result] = await trx(this.tableName)
-            .where({ order_id: orderId })
-            .update({ status, updated_at: new Date() })
-            .returning('*');
+        const updateData: any = { status, updated_at: new Date() };
+        if (trackingNumber) {
+          updateData.tracking_number = trackingNumber;
+        }
 
-          if (!result) {
-            throw new OrderRepositoryError('Order not found', 'NOT_FOUND');
-          }
+        const [result] = await this.db(this.tableName)
+          .where({ order_id: orderId })
+          .update(updateData)
+          .returning('*');
 
-          this.logger.info(
-            { operation: 'UPDATE_ORDER_STATUS', duration: performance.now() - start, ...this.redact(result) },
-            'Order status updated'
-          );
+        if (!result) {
+          throw new OrderRepositoryError('Order not found', 'NOT_FOUND');
+        }
 
-          return result;
-        });
+        this.logger.info(
+          { operation: 'UPDATE_ORDER_STATUS', duration: performance.now() - start, ...this.redact(result) },
+          'Order status updated'
+        );
+
+        return this.parseResult(result);
       } catch (error: any) {
         this.logger.error({ operation: 'UPDATE_ORDER_STATUS', orderId, error: error.message }, 'Failed to update order status');
         throw new OrderRepositoryError('Update failed', 'DB_UPDATE_ERROR', error);
@@ -130,11 +134,7 @@ export class OrderRepository {
         
         if (!result) return null;
 
-        const parsed = OrderModelSchema.parse({
-          ...result,
-          items: typeof result.items === 'string' ? JSON.parse(result.items) : result.items,
-          shipping_address: typeof result.shipping_address === 'string' ? JSON.parse(result.shipping_address) : result.shipping_address,
-        });
+        const parsed = this.parseResult(result);
 
         this.logger.debug(
           { operation: 'FIND_ORDER', duration: performance.now() - start, ...this.redact(parsed) },
@@ -146,6 +146,47 @@ export class OrderRepository {
         this.logger.error({ operation: 'FIND_ORDER', orderId, error: error.message }, 'Query failed');
         throw new OrderRepositoryError('Query execution failed', 'DB_FIND_ERROR', error);
       }
+    });
+  }
+
+  /**
+   * Retrieves all orders for a specific user.
+   */
+  public async listByUserId(userId: string): Promise<OrderModel[]> {
+    return await this.breaker.fire(async () => {
+      const start = performance.now();
+      try {
+        const results = await this.db(this.tableName)
+          .where({ user_id: userId })
+          .orderBy('created_at', 'desc');
+        
+        const parsedResults = results.map((result) => this.parseResult(result));
+
+        this.logger.debug(
+          { operation: 'LIST_ORDERS', duration: performance.now() - start, count: parsedResults.length, userId },
+          'Orders listed'
+        );
+
+        return parsedResults;
+      } catch (error: any) {
+        this.logger.error({ operation: 'LIST_ORDERS', userId, error: error.message }, 'Query failed');
+        throw new OrderRepositoryError('Query execution failed', 'DB_LIST_ERROR', error);
+      }
+    });
+  }
+
+  /**
+   * Executes a callback within a transaction.
+   */
+  public async runInTransaction<T>(callback: () => Promise<T>): Promise<T> {
+    return await this.db.transaction(callback);
+  }
+
+  private parseResult(result: any): OrderModel {
+    return OrderModelSchema.parse({
+      ...result,
+      items: typeof result.items === 'string' ? JSON.parse(result.items) : result.items,
+      shipping_address: typeof result.shipping_address === 'string' ? JSON.parse(result.shipping_address) : result.shipping_address,
     });
   }
 }

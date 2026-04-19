@@ -1,6 +1,6 @@
 import { Logger } from 'pino';
-import { KafkaMessagingClient } from './KafkaMessagingClient';
-import { Order } from '../../domain/types';
+import { KafkaMessagingClient } from '../../../../../shared/messaging/kafkaClient';
+import { Order } from '../../types/order_types';
 
 /**
  * Interface for topic configuration.

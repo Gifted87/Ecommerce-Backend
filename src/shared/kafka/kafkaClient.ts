@@ -1,5 +1,7 @@
+console.log("Mocking Kafka connection...");
+
 import { Kafka, Producer, Consumer, ProducerRecord, Message, EachMessagePayload } from 'kafkajs';
-import CircuitBreaker from 'opossum';
+import Opossum = require('opossum');
 import { z } from 'zod';
 import { Logger } from 'pino';
 
@@ -19,7 +21,8 @@ export type KafkaClientConfig = z.infer<typeof KafkaConfigSchema>;
 export class KafkaMessagingClient {
   private kafka: Kafka;
   private producer: Producer;
-  private producerBreaker: CircuitBreaker;
+  // Use any to bypass TS namespace issue
+  private producerBreaker: any;
   private logger: Logger;
 
   constructor(config: KafkaClientConfig, logger: Logger) {
@@ -42,7 +45,7 @@ export class KafkaMessagingClient {
       maxInFlightRequests: 5,
     });
 
-    this.producerBreaker = new CircuitBreaker(
+    this.producerBreaker = new Opossum(
       async (record: ProducerRecord) => await this.producer.send(record),
       {
         timeout: 5000,

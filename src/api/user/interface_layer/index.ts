@@ -11,47 +11,41 @@ export {
   UserUpdateSchema, 
   UserModel, 
   PublicUser, 
-  toPublicUser, 
-  validateRegistration 
-} from './domain';
+  toPublicUser,
+} from '../../../services/user/auth_mfa_module/types';
 
 // Export Domain Services
 /**
  * AuthService provides core authentication logic including login, registration, 
  * and token management. It is designed for non-blocking I/O operations.
  */
-export { AuthService } from './services/auth_service';
+export { AuthService } from '../../../services/user/auth_mfa_module/services/auth.service';
+
+/**
+ * UserService handles the core business logic for user management,
+ * including registration, profile updates, and persistence.
+ */
+export { UserService } from '../../../services/user/auth_mfa_module/services/user.service';
 
 /**
  * MfaService handles Multi-Factor Authentication workflows including secret 
  * generation, verification, and backup code management.
  */
-export { MfaService } from './services/mfa_service';
+export { MfaService } from '../../../services/user/auth_mfa_module/services/mfa.service';
 
 // Export Controllers
 /**
- * AuthController manages request orchestration for authentication-related endpoints,
- * integrating with AuthService and providing structured JSON responses.
+ * RegistrationController manages the user sign-up process.
  */
-export { AuthController } from './controllers/auth_controller';
+export { RegistrationController } from './controllers/registration/registration.controller';
 
 /**
- * MfaController orchestrates MFA lifecycle requests, ensuring all interactions
- * are secured by appropriate authentication middleware.
+ * ProfileController handles user profile lifecycle.
  */
-export { MfaController } from './controllers/mfa_controller';
+export { ProfileController } from './controllers/profile/profile.controller';
 
 // Export Infrastructure and Middleware
 /**
- * AuthMiddleware is the primary security gatekeeper. It must be applied to 
- * all protected routes to enforce session/JWT validation, rate limiting, 
- * and correlation ID tracking.
+ * AuthMiddleware is the primary security gatekeeper.
  */
-export { AuthMiddleware } from './middleware/auth_middleware';
-
-/**
- * Provides a central hook for initialization, such as setting up 
- * distributed tracing, logger instances, or dependency injection 
- * container configuration.
- */
-export * from './init';
+export { createAuthMiddleware } from './middleware/security/auth.middleware';

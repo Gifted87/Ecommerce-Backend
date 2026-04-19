@@ -1,5 +1,5 @@
-import { Kafka, Producer, Consumer, ProducerConfig, ConsumerConfig, SASLMechanism } from 'kafkajs';
-import CircuitBreaker from 'opossum';
+import { Kafka, Producer, Consumer, ProducerConfig, ConsumerConfig } from 'kafkajs';
+import Opossum = require('opossum');
 
 /**
  * Interface for Kafka configuration settings.
@@ -9,7 +9,7 @@ interface KafkaClientConfig {
   brokers: string[];
   ssl: boolean;
   sasl?: {
-    mechanism: SASLMechanism;
+    mechanism: any;
     username: string;
     password: string;
   };
@@ -22,7 +22,8 @@ interface KafkaClientConfig {
 export class KafkaMessagingClient {
   private kafka: Kafka;
   private producer: Producer;
-  private breaker: CircuitBreaker;
+  // Use any to bypass TS namespace issue
+  private breaker: any;
 
   /**
    * Initializes the Kafka Client.
@@ -41,7 +42,7 @@ export class KafkaMessagingClient {
       maxInFlightRequests: 1,
     });
 
-    this.breaker = new CircuitBreaker(async (action: () => Promise<any>) => await action(), {
+    this.breaker = new Opossum(async (action: () => Promise<any>) => await action(), {
       timeout: 5000,
       errorThresholdPercentage: 50,
       resetTimeout: 30000,

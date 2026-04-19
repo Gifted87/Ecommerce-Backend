@@ -1,6 +1,6 @@
 import knex, { Knex } from 'knex';
 import { Logger } from 'pino';
-import CircuitBreaker from 'opossum';
+import Opossum = require('opossum');
 import { ZodSchema } from 'zod';
 
 /**
@@ -26,13 +26,14 @@ export interface IUnitOfWork {
 export abstract class DatabaseRepository<T, ID> implements IUnitOfWork {
   protected readonly knex: Knex;
   protected readonly logger: Logger;
-  protected readonly breaker: CircuitBreaker;
+  // Use any to bypass TS namespace issue
+  protected readonly breaker: any;
 
   constructor(protected readonly db: Knex, protected readonly log: Logger, protected readonly tableName: string) {
     this.knex = db;
     this.logger = log.child({ module: 'repository', table: tableName });
 
-    this.breaker = new CircuitBreaker(async (fn: () => Promise<any>) => await fn(), {
+    this.breaker = new Opossum(async (fn: () => Promise<any>) => await fn(), {
       timeout: 5000,
       errorThresholdPercentage: 50,
       resetTimeout: 30000,

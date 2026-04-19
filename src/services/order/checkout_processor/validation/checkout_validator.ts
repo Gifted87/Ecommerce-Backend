@@ -4,7 +4,7 @@ import {
   OrderRequestSchema, 
   OrderRequest, 
   OrderItem 
-} from '../domain/order_schemas';
+} from '../types/order_types';
 
 /**
  * Custom error class for validation failures.
@@ -40,8 +40,8 @@ export class CheckoutValidator {
     const parsed = OrderRequestSchema.safeParse(rawRequest);
     if (!parsed.success) {
       throw new ValidationError(
-        parsed.error.issues.map((issue) => ({
-          path: issue.path.map((p) => String(p)),
+        parsed.error.issues.map((issue: z.ZodIssue) => ({
+          path: issue.path.map((p: string | number) => String(p)),
           message: issue.message,
         }))
       );

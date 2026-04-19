@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import { Logger } from 'pino';
 import { z } from 'zod';
-import { OrderRepository } from '../../../infrastructure/persistence/OrderRepository';
-import { PaginationQuerySchema, ValidationError, ValidationErrorCode } from '../../validators/OrderValidator';
-import { redactOrderPII } from '../../dtos/OrderDTOs';
+import { OrderRepository } from '@/infrastructure/persistence/OrderRepository';
+import { PaginationQuerySchema, ValidationError, ValidationErrorCode } from '@/api/order/interfaces/validators/OrderValidator';
+import { redactOrderPII } from '@/api/order/interfaces/dtos/OrderDTOs';
 
 /**
  * OrderHistoryQueryController handles high-throughput retrieval of historical order data.

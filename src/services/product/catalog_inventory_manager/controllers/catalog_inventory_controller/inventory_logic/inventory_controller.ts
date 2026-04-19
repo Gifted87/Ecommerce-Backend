@@ -3,9 +3,9 @@ import { Logger } from 'pino';
 import { z } from 'zod';
 import { Decimal } from 'decimal.js';
 import { randomUUID } from 'crypto';
-import { InventoryRepository } from '../../repository/inventory_repository';
-import { ReconciliationCacheManager } from '../../cache/reconciliation_cache_manager';
-import { KafkaProducer } from '../../events/kafka_producer';
+import { InventoryRepository } from '../../../repositories/inventory/inventoryRepository';
+import { ReconciliationCacheManager } from '../../../services/reconciliation/core/infrastructure/cache/reconciliation_cache_manager';
+import { KafkaMessagingManager } from '../../../bootstrap/infrastructure/messaging/KafkaMessagingManager';
 
 /**
  * Zod schemas for request validation.
@@ -41,7 +41,7 @@ export class CatalogInventoryController {
   constructor(
     private readonly repository: InventoryRepository,
     private readonly cache: ReconciliationCacheManager,
-    private readonly kafka: KafkaProducer,
+    private readonly kafka: KafkaMessagingManager,
     private readonly logger: Logger
   ) {}
 
@@ -129,10 +129,10 @@ export class CatalogInventoryController {
       const updatedInventory = await this.repository.updateStock(sku, adjustment, requestId);
       await this.cache.setInventoryState(sku, updatedInventory);
 
-      await this.kafka.send('inventory.adjusted', {
+      await this.kafka.publish('inventory.adjusted', sku, {
         header: { idempotencyKey: requestId, timestamp: new Date().toISOString() },
         payload: { productId: sku, adjustment, reason }
-      });
+      }, requestId);
 
       res.status(200).json({ data: updatedInventory, requestId });
     } catch (error) {

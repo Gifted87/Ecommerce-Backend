@@ -46,7 +46,7 @@ export const RemoveItemSchema = z.object({
 /**
  * Type inference for validated schemas.
  */
-export type CartItem = z.infer<typeof CartItemSchema>;
+export type ZodCartItem = z.infer<typeof CartItemSchema>;
 export type AddToCartRequest = z.infer<typeof AddToCartSchema>;
 export type UpdateQuantityRequest = z.infer<typeof UpdateQuantitySchema>;
 export type RemoveItemRequest = z.infer<typeof RemoveItemSchema>;

@@ -1,6 +1,6 @@
 import { Kafka, Producer, Consumer, EachMessagePayload } from 'kafkajs';
 import Redis from 'ioredis';
-import Opossum from 'opossum';
+import Opossum = require('opossum');
 import { Logger } from 'pino';
 import { z } from 'zod';
 import { setTimeout } from 'timers/promises';
@@ -25,7 +25,8 @@ export interface TaskDefinition {
 export class BackgroundWorkerOrchestrator {
   private state: WorkerState = WorkerState.BOOTSTRAP;
   private readonly workers: Map<string, TaskDefinition> = new Map();
-  private readonly circuitBreaker: Opossum;
+  // Use any to bypass TS namespace issue
+  private readonly circuitBreaker: any;
   private consumer: Consumer | null = null;
   private producer: Producer | null = null;
 
