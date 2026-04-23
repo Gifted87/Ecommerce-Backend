@@ -51,8 +51,7 @@ export type Inventory = z.infer<typeof InventorySchema>;
  */
 export class InventoryRepository {
   private readonly tableName = 'inventory';
-  // Use any to bypass TS namespace issue
-  private readonly breaker: any;
+  private readonly breaker: InstanceType<typeof Opossum>;
 
   constructor(
     private readonly knex: Knex,
@@ -83,6 +82,17 @@ export class InventoryRepository {
       const row = await this.knex(this.tableName).where({ product_id: productId }).first();
       if (!row) throw new InventoryNotFoundError(productId);
       return InventorySchema.parse(row);
+    });
+  }
+
+  /**
+   * Retrieves paginated inventory records.
+   */
+  public async findAllPaginated(page: number, limit: number): Promise<Inventory[]> {
+    return await this.breaker.fire(async () => {
+      const offset = (page - 1) * limit;
+      const rows = await this.knex(this.tableName).select('*').limit(limit).offset(offset);
+      return rows.map((r: any) => InventorySchema.parse(r));
     });
   }
 
@@ -159,6 +169,111 @@ export class InventoryRepository {
         }
 
         this.logger.error({ error, productId, correlationId }, 'Unexpected repository failure');
+        throw new RepositorySystemError('Internal database error', error);
+      }
+    }
+    throw new RepositorySystemError('Transaction failed after retries');
+  }
+
+  /**
+   * Reserves stock ensuring total_stock - reserved_stock >= amount
+   */
+  public async reserveStock(productId: string, amount: number, correlationId: string): Promise<Inventory> {
+    const start = performance.now();
+    let attempt = 0;
+    const maxRetries = 3;
+
+    while (attempt < maxRetries) {
+      try {
+        return await this.breaker.fire(async () => {
+          return await this.knex.transaction(async (trx) => {
+            const row = await trx(this.tableName)
+              .select('*')
+              .where({ product_id: productId })
+              .forUpdate()
+              .first();
+
+            if (!row) throw new InventoryNotFoundError(productId);
+
+            const current = InventorySchema.parse(row);
+            const available = current.total_stock - current.reserved_stock;
+
+            if (available < amount) {
+              throw new InsufficientStockError(productId, available, amount);
+            }
+
+            const [updated] = await trx(this.tableName)
+              .where({ product_id: productId })
+              .update({
+                reserved_stock: current.reserved_stock + amount,
+                updated_at: new Date(),
+              })
+              .returning('*');
+
+            const result = InventorySchema.parse(updated);
+            
+            this.logger.info({ operation: 'RESERVE_STOCK', productId, amount, correlationId, duration: performance.now() - start }, 'Stock reserved successfully');
+            return result;
+          });
+        });
+      } catch (error: any) {
+        attempt++;
+        if (error?.code === '40P01' && attempt < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 100));
+          continue;
+        }
+        if (error instanceof InventoryNotFoundError || error instanceof InsufficientStockError) throw error;
+        throw new RepositorySystemError('Internal database error', error);
+      }
+    }
+    throw new RepositorySystemError('Transaction failed after retries');
+  }
+
+  /**
+   * Releases stock by decrementing reserved_stock
+   */
+  public async releaseStock(productId: string, amount: number, correlationId: string): Promise<Inventory> {
+    const start = performance.now();
+    let attempt = 0;
+    const maxRetries = 3;
+
+    while (attempt < maxRetries) {
+      try {
+        return await this.breaker.fire(async () => {
+          return await this.knex.transaction(async (trx) => {
+            const row = await trx(this.tableName)
+              .select('*')
+              .where({ product_id: productId })
+              .forUpdate()
+              .first();
+
+            if (!row) throw new InventoryNotFoundError(productId);
+
+            const current = InventorySchema.parse(row);
+            
+            // Allow negative or clamp? Better to ensure we don't go below 0
+            const newReserved = Math.max(0, current.reserved_stock - amount);
+
+            const [updated] = await trx(this.tableName)
+              .where({ product_id: productId })
+              .update({
+                reserved_stock: newReserved,
+                updated_at: new Date(),
+              })
+              .returning('*');
+
+            const result = InventorySchema.parse(updated);
+            this.logger.info({ operation: 'RELEASE_STOCK', productId, amount, correlationId, duration: performance.now() - start }, 'Stock released successfully');
+            return result;
+          });
+        });
+      } catch (error: any) {
+        attempt++;
+        if (error?.code === '40P01' && attempt < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 100));
+          continue;
+        }
+        if (error instanceof InventoryNotFoundError || error instanceof InsufficientStockError) throw error;
         throw new RepositorySystemError('Internal database error', error);
       }
     }

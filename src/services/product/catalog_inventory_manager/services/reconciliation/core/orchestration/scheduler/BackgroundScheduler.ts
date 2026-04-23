@@ -66,9 +66,14 @@ export class BackgroundScheduler extends EventEmitter {
       const startTime = Date.now();
       
       try {
-        // Simple partitioning strategy based on SKU ranges
-        // In a production environment, this would dynamically fetch active ranges
-        await this.performReconciliationCycle('default-range');
+        // Fetch active partition ranges dynamically using the injected dbpool or generic queries.
+        // Assuming redis has available ranges or using a fixed dynamic query loop for demonstration:
+        const ranges = await this.redis.smembers('active_sku_ranges');
+        const activeRanges = ranges.length > 0 ? ranges : ['default-range'];
+        
+        for (const range of activeRanges) {
+          await this.performReconciliationCycle(range);
+        }
       } catch (err) {
         this.logger.error({ err }, 'Critical failure in reconciliation cycle.');
       }

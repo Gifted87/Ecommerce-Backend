@@ -2,6 +2,7 @@ import { Request, Response, NextFunction, RequestHandler } from 'express';
 import { z } from 'zod';
 import pino from 'pino';
 import { v4 as uuidv4 } from 'uuid';
+import { getRedactionConfig } from '../../../../../shared/utils/piiRedactor';
 
 /**
  * @fileoverview Schema-based input validation middleware.
@@ -12,10 +13,7 @@ import { v4 as uuidv4 } from 'uuid';
 // Production-ready logger configuration with PII redaction
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
-  redact: {
-    paths: ['email', 'password', 'token', 'secret', 'authorization', 'cookie'],
-    censor: '[REDACTED]',
-  },
+  redact: getRedactionConfig(),
   base: {
     service: 'user-lifecycle-middleware',
   },

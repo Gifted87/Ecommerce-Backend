@@ -45,7 +45,10 @@ export class AuthService {
     private readonly redis: Redis,
     private readonly securityService: SecurityService
   ) {
-    this.jwtSecret = process.env.JWT_SECRET || 'fallback_secret_must_be_configured_in_production';
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET must be configured in production environment.');
+    }
+    this.jwtSecret = process.env.JWT_SECRET;
   }
 
   /**
@@ -70,7 +73,7 @@ export class AuthService {
     const client = await this.db.connect();
     try {
       const { rows } = await client.query(
-        'SELECT user_id, password_hash FROM users WHERE email = $1 LIMIT 1',
+        'SELECT user_id, password_hash FROM users WHERE email = $1 AND is_active = true LIMIT 1',
         [email.toLowerCase()]
       );
 
@@ -201,16 +204,15 @@ export class AuthService {
    * @private
    */
   private async generateToken(userId: string, email: string, mfaVerified: boolean): Promise<string> {
-    const payload: TokenPayload = {
+    const payload: Omit<TokenPayload, 'exp'> = {
       sub: userId,
       email: email,
       roles: ['user'],
       mfa_verified: mfaVerified,
-      exp: Math.floor(Date.now() / 1000) + 900,
       jti: uuidv4(),
       sid: uuidv4()
     };
-    return jwt.sign(payload, this.jwtSecret);
+    return jwt.sign(payload, this.jwtSecret, { expiresIn: this.jwtExpiration });
   }
 
   /**

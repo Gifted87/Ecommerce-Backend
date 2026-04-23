@@ -1,7 +1,8 @@
 import Redis from 'ioredis';
-import Opossum = require('opossum');
+import CircuitBreaker = require('opossum');
 import { Logger } from 'pino';
 import { randomUUID } from 'crypto';
+import Redlock from 'redlock';
 import { CartConcurrencyError } from './cart.errors';
 
 /**
@@ -15,40 +16,40 @@ export class ServiceUnavailableError extends Error {
 }
 
 /**
- * CartLockManager handles distributed locking for cart operations.
+ * CartLockManager handles locking for cart operations.
  * Implements SET NX EX pattern with atomic Lua-based release.
+ * NOTE: This is a single-node lock algorithm. In a Redis Cluster failover, 
+ * Redlock or a wait-consensus model is recommended to prevent split-brain locking.
+ * This class isolates its lock keys within the "{cart-lock}" hashtag to avoid cluster slot issues.
  */
 export class CartLockManager {
   private readonly redis: Redis;
   private readonly logger: Logger;
-  // Use any to bypass TS namespace issue
-  private readonly breaker: any;
-  private readonly releaseScriptSha: string = '';
+  private readonly redlock: Redlock;
 
-  private readonly RELEASE_LUA_SCRIPT = `
-    if redis.call("get", KEYS[1]) == ARGV[1] then
-      return redis.call("del", KEYS[1])
-    else
-      return 0
-    end
-  `;
-
-  constructor(redisClient: Redis, logger: Logger) {
+  constructor(redisClient: Redis, logger: Logger, extraRedlockNodes?: Redis[]) {
     this.redis = redisClient;
     this.logger = logger.child({ module: 'CartLockManager' });
+    const allNodes: Redis[] = [this.redis, ...(extraRedlockNodes ?? [])];
 
-    const options = {
-      timeout: 500,
-      errorThresholdPercentage: 50,
-      resetTimeout: 30000,
-    };
+    if (allNodes.length < 3) {
+      this.logger.warn(
+        { nodeCount: allNodes.length },
+        'CartLockManager: Redlock is operating with fewer than 3 independent Redis nodes. ' +
+        'Split-brain safety is NOT guaranteed. Set REDIS_REDLOCK_NODES in production.'
+      );
+    }
 
-    this.breaker = new Opossum(async (cmd: string, ...args: any[]) => {
-      return (this.redis as any)[cmd](...args);
-    }, options);
-
-    this.breaker.fallback(() => {
-      throw new ServiceUnavailableError('Cart locking service currently unavailable.');
+    this.redlock = new Redlock(allNodes, {
+      driftFactor: 0.01,
+      retryCount: 5,
+      retryDelay: 200,
+      retryJitter: 200,
+      automaticExtensionThreshold: 500,
+    });
+    
+    this.redlock.on('error', (error: any) => {
+      this.logger.error({ error }, 'Redlock encountered an error');
     });
   }
 
@@ -60,47 +61,28 @@ export class CartLockManager {
       throw new Error('Invalid userId format');
     }
 
-    const lockKey = `cart:lock:${userId}`;
-    const requestId = randomUUID();
+    const lockKey = `{cart-lock}:${userId}`;
+    let lock;
 
-    await this.acquireLockWithRetry(lockKey, requestId, ttlSeconds);
-
-    const startTime = Date.now();
     try {
-      return await callback();
-    } finally {
+      lock = await this.redlock.acquire([lockKey], ttlSeconds * 1000);
+      this.logger.info({ userId }, 'Cart Lock acquired via Redlock');
+      
+      const startTime = Date.now();
+      const result = await callback();
       const duration = Date.now() - startTime;
-      await this.releaseLock(lockKey, requestId);
-      this.logger.info({ userId, requestId, duration }, 'Lock released');
-    }
-  }
-
-  private async acquireLockWithRetry(key: string, requestId: string, ttl: number): Promise<void> {
-    const maxRetries = 5;
-    let attempt = 0;
-
-    while (attempt < maxRetries) {
-      const result = await this.breaker.fire('set', key, requestId, 'EX', ttl, 'NX');
-
-      if (result === 'OK') {
-        this.logger.info({ key, requestId }, 'Lock acquired');
-        return;
-      }
-
-      attempt++;
-      const delay = Math.pow(2, attempt) * 100 + Math.random() * 50;
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-
-    this.logger.warn({ key, requestId }, 'Failed to acquire lock after retries');
-    throw new CartConcurrencyError('Failed to acquire lock after retries', { resourceId: key });
-  }
-
-  private async releaseLock(key: string, requestId: string): Promise<void> {
-    try {
-      await this.breaker.fire('eval', this.RELEASE_LUA_SCRIPT, 1, key, requestId);
+      
+      this.logger.info({ userId, duration }, 'Cart Lock released efficiently');
+      return result;
     } catch (error) {
-      this.logger.error({ key, requestId, error }, 'Error releasing lock');
+      if ((error as any).name === 'ExecutionError') {
+        throw new CartConcurrencyError('Failed to acquire Cart Lock', { resourceId: lockKey });
+      }
+      throw error;
+    } finally {
+      if (lock) {
+        await lock.release().catch(err => this.logger.error({ err }, 'Failed to release Cart Redlock'));
+      }
     }
   }
 }

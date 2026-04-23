@@ -4,6 +4,7 @@ import Redis from 'ioredis';
 import { z } from 'zod';
 import { Logger } from 'pino';
 import Opossum = require('opossum');
+import Redlock from 'redlock';
 
 /**
  * Event validation schemas.
@@ -35,10 +36,12 @@ export interface ReplayEngineConfig {
  */
 export class EventReplayEngine {
   private readonly kafka: Kafka;
-  private readonly consumer: Consumer;
+  private readonly consumer: import('kafkajs').Consumer;
+  private readonly producer: import('kafkajs').Producer;
   private readonly dbPool: Pool;
   private readonly redis: Redis;
   private readonly logger: Logger;
+  private readonly redlock: Redlock;
   // Use any to bypass TS namespace issue
   private readonly breaker: any;
 
@@ -47,12 +50,21 @@ export class EventReplayEngine {
     this.redis = config.redisClient;
     this.logger = config.logger.child({ module: 'EventReplayEngine' });
 
+    this.redlock = new Redlock([this.redis], {
+      driftFactor: 0.01,
+      retryCount: 3,
+      retryDelay: 200,
+      retryJitter: 200,
+      automaticExtensionThreshold: 500,
+    });
+
     this.kafka = new Kafka({
       clientId: 'inventory-replay-engine',
       brokers: config.kafkaBrokers,
     });
 
     this.consumer = this.kafka.consumer({ groupId: config.groupId });
+    this.producer = this.kafka.producer();
 
     this.breaker = new Opossum(this.processEvent.bind(this), {
       timeout: 10000,
@@ -65,6 +77,7 @@ export class EventReplayEngine {
    * Starts the consumption loop for the replay process.
    */
   public async start(): Promise<void> {
+    await this.producer.connect();
     await this.consumer.connect();
     await this.consumer.subscribe({ topic: this.config.topic, fromBeginning: true });
 
@@ -73,8 +86,25 @@ export class EventReplayEngine {
         try {
           await this.breaker.fire(payload);
         } catch (error) {
-          this.logger.error({ error, offset: payload.message.offset }, 'Failed to process event through breaker');
-          // In production, move to DLQ logic should be placed here
+          this.logger.error({ error, offset: payload.message.offset }, 'Failed to process event through breaker. Moving to DLQ.');
+          
+          // Publish to Dead Letter Queue
+          try {
+            await this.producer.send({
+              topic: 'error-events',
+              messages: [{
+                key: payload.message.key,
+                value: payload.message.value,
+                headers: {
+                  ...payload.message.headers,
+                  'X-Error-Reason': Buffer.from((error as Error).message || 'Unknown breaker failure'),
+                  'X-Original-Topic': Buffer.from(payload.topic)
+                }
+              }]
+            });
+          } catch (dlqError) {
+            this.logger.error({ error: dlqError, offset: payload.message.offset }, 'CRITICAL: Failed to publish to DLQ!');
+          }
         }
       },
     });
@@ -91,11 +121,10 @@ export class EventReplayEngine {
     const event = InventoryEventSchema.parse(JSON.parse(messageValue));
     const lockKey = `reconciliation:lock:${event.sku}`;
 
-    // Acquire distributed lock in Redis to ensure idempotency
-    // Note: The original 'NX', 'EX', 60 was causing TS errors, let's try a safer Redis set
-    const lockAcquired = await this.redis.set(lockKey, 'locked', 'EX', 60, 'NX');
-    
-    if (!lockAcquired) {
+    let lock;
+    try {
+      lock = await this.redlock.acquire([lockKey], 60000);
+    } catch (err) {
       this.logger.warn({ sku: event.sku }, 'Reconciliation already in progress for SKU');
       return;
     }
@@ -130,11 +159,14 @@ export class EventReplayEngine {
       throw error;
     } finally {
       client.release();
-      await this.redis.del(lockKey);
+      if (lock) {
+        await lock.release().catch((e) => this.logger.error({ error: e }, 'Failed to release Redlock'));
+      }
     }
   }
 
   public async stop(): Promise<void> {
     await this.consumer.disconnect();
+    await this.producer.disconnect();
   }
 }

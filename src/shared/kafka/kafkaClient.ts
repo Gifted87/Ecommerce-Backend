@@ -1,4 +1,3 @@
-console.log("Mocking Kafka connection...");
 
 import { Kafka, Producer, Consumer, ProducerRecord, Message, EachMessagePayload } from 'kafkajs';
 import Opossum = require('opossum');

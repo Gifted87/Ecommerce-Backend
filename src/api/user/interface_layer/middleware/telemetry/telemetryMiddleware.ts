@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import pino, { Logger } from 'pino';
 import os from 'os';
+import { getRedactionConfig } from '../../../../../shared/utils/piiRedactor';
 
 /**
  * @fileoverview Telemetry Middleware for the complex ecommerce backend.
@@ -11,17 +12,13 @@ import os from 'os';
 
 // Configuration loaded from environment variables
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
-const REDACTED_KEYS = (process.env.REDACTED_KEYS || 'password,authorization,token,cookie,set-cookie,secret,cvv').split(',');
 
 /**
  * Root logger instance configured for asynchronous, structured JSON output.
  */
 const rootLogger: Logger = pino({
   level: LOG_LEVEL,
-  redact: {
-    paths: REDACTED_KEYS,
-    censor: '[REDACTED]',
-  },
+  redact: getRedactionConfig(),
   base: {
     pid: process.pid,
     hostname: os.hostname(),

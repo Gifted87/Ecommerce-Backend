@@ -36,18 +36,32 @@ const DEFAULT_AUTHENTICATED_LIMIT: RateLimitConfig = {
 export class DistributedRateLimiter {
   private redis: Redis;
   private logger: Logger;
-  // Use any to bypass TS namespace issue
-  private breaker: any;
-  private limiters: Map<string, RateLimiterRedis> = new Map();
+  private breaker: InstanceType<typeof Opossum>;
+  private readonly anonLimiter: RateLimiterRedis;
+  private readonly authLimiter: RateLimiterRedis;
 
   constructor(redis: Redis, logger: Logger) {
     this.redis = redis;
     this.logger = logger.child({ module: 'DistributedRateLimiter' });
 
+    this.anonLimiter = new RateLimiterRedis({
+      storeClient: this.redis,
+      keyPrefix: 'rate:anon',
+      points: DEFAULT_UNAUTHENTICATED_LIMIT.points,
+      duration: DEFAULT_UNAUTHENTICATED_LIMIT.duration,
+    });
+
+    this.authLimiter = new RateLimiterRedis({
+      storeClient: this.redis,
+      keyPrefix: 'rate:auth',
+      points: DEFAULT_AUTHENTICATED_LIMIT.points,
+      duration: DEFAULT_AUTHENTICATED_LIMIT.duration,
+    });
+
     // Circuit breaker for Redis dependency protection
     this.breaker = new Opossum(
-      async (key: string, points: number) => {
-        const limiter = this.getLimiter(key, points);
+      async (key: string, isAuth: boolean) => {
+        const limiter = isAuth ? this.authLimiter : this.anonLimiter;
         return await limiter.consume(key);
       },
       {
@@ -57,23 +71,8 @@ export class DistributedRateLimiter {
       }
     );
 
-    this.breaker.on('open', () => this.logger.error('RateLimiter circuit breaker opened. Failing open.'));
+    this.breaker.on('open', () => this.logger.error('RateLimiter circuit breaker opened. Failing closed.'));
     this.breaker.on('close', () => this.logger.info('RateLimiter circuit breaker closed.'));
-  }
-
-  private getLimiter(keyPrefix: string, points: number): RateLimiterRedis {
-    if (!this.limiters.has(keyPrefix)) {
-      this.limiters.set(
-        keyPrefix,
-        new RateLimiterRedis({
-          storeClient: this.redis,
-          keyPrefix,
-          points,
-          duration: DEFAULT_UNAUTHENTICATED_LIMIT.duration,
-        })
-      );
-    }
-    return this.limiters.get(keyPrefix)!;
   }
 
   /**
@@ -88,7 +87,7 @@ export class DistributedRateLimiter {
       const config = overrideConfig || (userId ? DEFAULT_AUTHENTICATED_LIMIT : DEFAULT_UNAUTHENTICATED_LIMIT);
 
       try {
-        await this.breaker.fire(key, config.points);
+        await this.breaker.fire(key, !!userId);
         next();
       } catch (err: any) {
         if (err instanceof Error && (err as any).name === 'RateLimiterRes') {
@@ -103,9 +102,12 @@ export class DistributedRateLimiter {
           });
         }
 
-        // Fail-open: log error but proceed
-        this.logger.error({ correlationId, err, event: 'RATE_LIMITER_FAILURE' }, 'Rate limiter failed, proceeding anyway');
-        next();
+        // Fail-closed to prevent brute force during Redis outage
+        this.logger.error({ correlationId, err, event: 'RATE_LIMITER_FAILURE' }, 'Rate limiter failed, returning 503');
+        return res.status(503).json({
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Rate limiting service is degraded',
+        });
       }
     };
   }

@@ -45,6 +45,23 @@ export interface IPaymentService {
    * @returns A promise resolving to the external transaction ID.
    */
   processPayment(token: string, amount: string, orderId: string, correlationId: string): Promise<{ transactionId: string }>;
+
+  /**
+   * Reverses or refunds a payment transaction.
+   * 
+   * @param transactionId - The transaction ID to refund.
+   * @param orderId - The ID of the order.
+   * @param correlationId - Unique ID for tracing across services.
+   * @returns A promise resolving when the refund is successful.
+   */
+  refundPayment(transactionId: string, orderId: string, correlationId: string): Promise<void>;
+}
+
+export class CriticalCompensationError extends Error {
+  constructor(public originalError: any, public compensationError: any) {
+    super('CRITICAL: Compensation workflow failed leaving order in stuck PROCESSING state.');
+    this.name = 'CriticalCompensationError';
+  }
 }
 
 /**
@@ -61,19 +78,17 @@ export interface IPaymentService {
 export class CheckoutProcessorService {
   // Use any to bypass TS namespace issue
   private readonly breaker: any;
-  private paymentService: IPaymentService = {
-    // Mock payment service for demonstration of the flow
-    processPayment: async () => ({ transactionId: 'TXN_' + Math.random().toString(36).substr(2, 9) })
-  };
 
   /**
    * @param stateManager - Manages the persistent state of orders and status transitions.
    * @param eventProducer - Responsible for publishing checkout-related events to Kafka.
+   * @param paymentService - External payment processing service.
    * @param logger - The application's pino logger instance.
    */
   constructor(
     private readonly stateManager: OrderStateManager,
     private readonly eventProducer: CheckoutEventProducer,
+    private readonly paymentService: IPaymentService,
     private readonly logger: Logger
   ) {
     // Initialize circuit breaker for external dependencies (Redis/DB)
@@ -146,15 +161,17 @@ export class CheckoutProcessorService {
       this.logger.info({ msg: 'Order state updated to PROCESSING', orderId });
 
       // 2. Process Payment
+      let transactionId: string | null = null;
       try {
         this.logger.info({ msg: 'Initiating payment processing', orderId, correlationId });
-        await this.paymentService.processPayment(
+        const result = await this.paymentService.processPayment(
           order.payment_token, 
           order.total_amount, 
           orderId, 
           correlationId
         );
-        this.logger.info({ msg: 'Payment processed successfully', orderId, correlationId });
+        transactionId = result.transactionId;
+        this.logger.info({ msg: 'Payment processed successfully', orderId, correlationId, transactionId });
       } catch (paymentError) {
         this.logger.error({ msg: 'Payment failed', orderId, correlationId, error: paymentError });
         // Compensate: Move back to FAILED or PENDING
@@ -162,13 +179,25 @@ export class CheckoutProcessorService {
         throw new Error(`Payment processing failed: ${(paymentError as Error).message}`);
       }
 
-      // 3. Publish Event
-      await this.eventProducer.publishOrderPlaced(order as any);
-      this.logger.info({ msg: 'Order placed event published', orderId });
-
-      // 4. Finalize Transition to PLACED
-      await this.stateManager.transitionOrder(orderId, OrderStatus.PLACED);
-      this.logger.info({ msg: 'Order successfully placed', orderId });
+      // Rest of orchestration
+      try {
+        // 3. Finalize Transition to PLACED
+        await this.stateManager.transitionOrder(orderId, OrderStatus.PLACED);
+        this.logger.info({ msg: 'Order successfully placed', orderId });
+      } catch (orchestrationError) {
+        this.logger.error({ msg: 'Post-payment workflow failed, attempting refund', orderId, correlationId, error: orchestrationError });
+        if (transactionId) {
+          try {
+            await this.paymentService.refundPayment(transactionId, orderId, correlationId);
+            this.logger.info({ msg: 'Payment safely refunded', orderId, transactionId });
+          } catch (refundError) {
+            this.logger.error({ msg: 'CRITICAL: Failed to refund payment for failed order', orderId, transactionId, error: refundError });
+          }
+        }
+        
+        await this.stateManager.transitionOrder(orderId, OrderStatus.FAILED);
+        throw orchestrationError;
+      }
 
       return { success: true, orderId };
     } catch (error) {
@@ -177,7 +206,10 @@ export class CheckoutProcessorService {
       // If we are here, something went wrong in our orchestration.
       try {
         await this.stateManager.transitionOrder(orderId, OrderStatus.FAILED);
-      } catch (compensateError) { /* ignore compensation errors to keep original error */ }
+      } catch (compensateError) {
+        this.logger.error({ msg: 'CRITICAL: Compensation failed!', orderId, error: compensateError });
+        throw new CriticalCompensationError(error, compensateError);
+      }
       this.logger.error({ msg: 'Failed to execute checkout flow', orderId, error });
       throw error;
     }
@@ -196,14 +228,15 @@ export class CheckoutProcessorService {
     return order;
   }
 
-  /**
-   * Lists all orders associated with a specific user.
-   * 
-   * @param userId - The unique identifier of the user.
-   * @returns A promise resolving to an array of orders.
-   */
   public async listOrdersByUserId(userId: string): Promise<any> {
     return await this.stateManager.listOrdersByUserId(userId);
+  }
+
+  /**
+   * Lists orders for a specific user with pagination.
+   */
+  public async listOrdersPaginated(userId: string, limit: number, page: number): Promise<any> {
+    return await this.stateManager.listOrdersPaginated(userId, limit, page);
   }
 
   /**

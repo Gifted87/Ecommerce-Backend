@@ -92,7 +92,7 @@ export class OrderRepository {
   /**
    * Updates an existing order status within a transaction.
    */
-  public async updateStatus(orderId: string, status: OrderStatus, trackingNumber?: string): Promise<OrderModel> {
+  public async updateStatus(orderId: string, status: OrderStatus, trackingNumber?: string, trx?: Knex.Transaction): Promise<OrderModel> {
     return await this.breaker.fire(async () => {
       const start = performance.now();
       try {
@@ -101,10 +101,12 @@ export class OrderRepository {
           updateData.tracking_number = trackingNumber;
         }
 
-        const [result] = await this.db(this.tableName)
+        const query = this.db(this.tableName)
           .where({ order_id: orderId })
           .update(updateData)
           .returning('*');
+
+        const [result] = await (trx ? query.transacting(trx) : query);
 
         if (!result) {
           throw new OrderRepositoryError('Order not found', 'NOT_FOUND');
@@ -176,9 +178,37 @@ export class OrderRepository {
   }
 
   /**
+   * Retrieves paginated orders for a specific user.
+   */
+  public async listPaginated(userId: string, limit: number, offset: number): Promise<OrderModel[]> {
+    return await this.breaker.fire(async () => {
+      const start = performance.now();
+      try {
+        const results = await this.db(this.tableName)
+          .where({ user_id: userId })
+          .orderBy('created_at', 'desc')
+          .limit(limit)
+          .offset(offset);
+        
+        const parsedResults = results.map((result) => this.parseResult(result));
+
+        this.logger.debug(
+          { operation: 'LIST_PAGINATED_ORDERS', duration: performance.now() - start, count: parsedResults.length, userId },
+          'Orders listed paginated'
+        );
+
+        return parsedResults;
+      } catch (error: any) {
+        this.logger.error({ operation: 'LIST_PAGINATED_ORDERS', userId, error: error.message }, 'Query failed');
+        throw new OrderRepositoryError('Query execution failed', 'DB_LIST_ERROR', error);
+      }
+    });
+  }
+
+  /**
    * Executes a callback within a transaction.
    */
-  public async runInTransaction<T>(callback: () => Promise<T>): Promise<T> {
+  public async runInTransaction<T>(callback: (trx: Knex.Transaction) => Promise<T>): Promise<T> {
     return await this.db.transaction(callback);
   }
 

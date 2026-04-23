@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { Logger } from 'pino';
 import { register, Registry } from 'prom-client';
 import { ProactiveHealthAuditor } from '@/infrastructure/health/proactive_health_auditor';
-import { DistributedObservabilityInstrumenter } from '@/infrastructure/observability/instrumenter';
+
 
 /**
  * OrderObservabilityController handles health checks and metrics exposure for the order service.
@@ -13,7 +13,7 @@ export class OrderObservabilityController {
 
   constructor(
     private readonly healthAuditor: ProactiveHealthAuditor,
-    private readonly instrumenter: DistributedObservabilityInstrumenter,
+
     private readonly logger: Logger
   ) {
     this.registry = register;

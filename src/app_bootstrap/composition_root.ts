@@ -10,6 +10,7 @@ import { SecurityService } from '../shared/security/security.service';
 
 // User Module
 import { UserService } from '../services/user/auth_mfa_module/services/user.service';
+import { UserRepository } from '../services/user/auth_mfa_module/services/user.repository';
 import { MfaService } from '../services/user/auth_mfa_module/services/mfa.service';
 import { AuthService } from '../services/user/auth_mfa_module/services/auth.service';
 import { RegistrationController } from '../api/user/interface_layer/controllers/registration/registration.controller';
@@ -36,8 +37,10 @@ import { OrderErrorMapper } from '../api/order/interfaces/controllers/order_cont
 import { CheckoutProcessorService } from '../services/order/checkout_processor/service/CheckoutProcessorService';
 import { createOrderRouter } from '../api/order/interfaces/routes/orderRoutes';
 import { CheckoutEventProducer } from '../services/order/checkout_processor/infrastructure/events/CheckoutEventProducer';
+import { OutboxRelayService } from '../services/order/checkout_processor/infrastructure/outbox/OutboxRelayService';
 import { DistributedLockService } from '../services/order/checkout_processor/infrastructure/lock/DistributedLockService';
 import { KafkaMessagingClient } from '../shared/messaging/kafkaClient';
+import { StripePaymentService } from '../services/order/checkout_processor/infrastructure/payment/StripePaymentService';
 
 // Cart Module
 import { CartRepository } from '../services/cart/manager/cart.repository';
@@ -58,6 +61,7 @@ export interface CompositionRoot {
   productRouter: any;
   orderRouter: any;
   cartRouter: any;
+  outboxRelay: OutboxRelayService;
 }
 
 /**
@@ -71,11 +75,31 @@ export const composeDependencies = async (
 ): Promise<CompositionRoot> => {
   const knexInstance = knex({ client: 'postgresql', connection: db as any });
 
+  // Build independent Redis connections for Redlock consensus.
+  // REDIS_REDLOCK_NODES should be comma-separated host:port pairs (e.g. "redis1:6379,redis2:6379,redis3:6379").
+  // When absent, lock managers fall back to the main redis client with a startup warning.
+  const redlockNodes: Redis[] = (process.env.REDIS_REDLOCK_NODES || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((node) => {
+      const [host, portStr] = node.split(':');
+      return new Redis({
+        host: host || '127.0.0.1',
+        port: parseInt(portStr || '6379', 10),
+        password: process.env.REDIS_PASSWORD || undefined,
+        tls: process.env.REDIS_USE_TLS === 'true' ? {} : undefined,
+        lazyConnect: true,
+        enableOfflineQueue: false,
+      });
+    });
+
   const securityService = new SecurityService(config.SECURITY_MASTER_KEY, config.SECURITY_PEPPER);
   const securityMiddleware = createSecurityMiddleware(redis, logger);
 
   // User Module
-  const userService = new UserService(db, securityService, logger);
+  const userRepository = new UserRepository(db, logger);
+  const userService = new UserService(userRepository, securityService, logger);
   const mfaService = new MfaService(redis, db, securityService, logger);
   const authService = new AuthService(db, redis, securityService);
   
@@ -99,11 +123,15 @@ export const composeDependencies = async (
   const inventoryRepository = new InventoryRepository(knexInstance, logger);
   InventoryCacheManager.initialize(logger);
   
+  if (!process.env.HMAC_SECRET) {
+    throw new Error('HMAC_SECRET is required.');
+  }
+
   const inventoryEventPublisher = new InventoryEventPublisher({
       clientId: 'inventory-service',
       brokers: config.KAFKA_BROKER_URL,
       ssl: false,
-      hmacSecret: process.env.HMAC_SECRET || 'a-very-long-and-secure-hmac-secret'
+      hmacSecret: process.env.HMAC_SECRET
   }, logger);
   await inventoryEventPublisher.connect();
   
@@ -135,7 +163,7 @@ export const composeDependencies = async (
       orderPlaced: 'orders.placed',
       orderUpdated: 'orders.updated'
   });
-  const distributedLockService = new DistributedLockService(redis, logger);
+  const distributedLockService = new DistributedLockService(redis, logger, redlockNodes);
   const orderTransitionEngine = new OrderTransitionEngine(logger);
   
   const orderStateManager = new OrderStateManager(
@@ -146,9 +174,14 @@ export const composeDependencies = async (
     logger
   );
 
+  // Verify environment for external integrations
+  if (!process.env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY is required in environment');
+  const stripePaymentService = new StripePaymentService(logger);
+
   const checkoutProcessorService = new CheckoutProcessorService(
       orderStateManager,
       checkoutEventProducer,
+      stripePaymentService,
       logger
   );
 
@@ -167,7 +200,7 @@ export const composeDependencies = async (
 
   // Cart Module
   const cartRepository = new CartRepository(redis, logger);
-  const cartLockManager = new CartLockManager(redis, logger);
+  const cartLockManager = new CartLockManager(redis, logger, redlockNodes);
   const cartMerger = new CartMerger(redis, logger, cartLockManager);
   const cartService = new CartService(cartRepository, cartLockManager, cartMerger, logger);
   
@@ -185,10 +218,19 @@ export const composeDependencies = async (
     authMiddleware: () => securityMiddleware.authenticate()
   });
 
+  const outboxRelay = new OutboxRelayService(
+    knexInstance,
+    checkoutEventProducer,
+    logger,
+    parseInt(process.env.OUTBOX_BATCH_SIZE || '50', 10),
+    parseInt(process.env.OUTBOX_INTERVAL_MS || '1000', 10)
+  );
+
   return {
     userRouter,
     productRouter,
     orderRouter,
-    cartRouter
+    cartRouter,
+    outboxRelay
   };
 };

@@ -25,8 +25,12 @@ export class MfaController {
    */
   async healthCheck(req: Request, res: Response): Promise<void> {
     try {
-      // In a real system, verify DB and Redis connectivity here
-      res.status(200).json({ status: 'UP', service: 'MfaController' });
+      const isHealthy = await this.mfaService.healthCheck();
+      if (isHealthy) {
+        res.status(200).json({ status: 'UP', service: 'MfaController' });
+      } else {
+        res.status(503).json({ status: 'DOWN', service: 'MfaController' });
+      }
     } catch (error) {
       this.logger.error({ error }, 'MfaController health check failed');
       res.status(500).json({ error: 'INTERNAL_SERVER_ERROR' });

@@ -8,6 +8,7 @@ import { Redis } from 'ioredis';
 import { Pool } from 'pg';
 import { Kafka } from 'kafkajs';
 import { composeDependencies } from './composition_root';
+import { OutboxRelayService } from '../services/order/checkout_processor/infrastructure/outbox/OutboxRelayService';
 import logger from '../shared/logger';
 import { requestIdMiddleware as requestContext } from '@/middleware/observability';
 import { errorHandler as handleGlobalError } from '@/middleware/error';
@@ -25,6 +26,9 @@ export interface ServerDependencies {
   logger: Logger;
 }
 
+// Module-level reference so startServer can reach it during graceful shutdown.
+let _outboxRelay: OutboxRelayService | null = null;
+
 /**
  * Configures the Express application pipeline.
  * Ensures security headers, rate limiting, correlation tracing, and error handling.
@@ -34,13 +38,24 @@ export interface ServerDependencies {
  */
 export const createServer = async (deps: ServerDependencies): Promise<Express> => {
   const app = express();
+  
+  // 0. Trust Proxy for Load Balancer IP extraction
+  app.set('trust proxy', 1);
 
   // 1. Security: Helmet for standard HTTP headers mitigation
   app.use(helmet());
 
   // 2. Security: CORS Policy - Restrict origins to production/configured environments
+  const allowedOrigins = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',') 
+    : ['http://localhost:3000'];
+
+  if (process.env.NODE_ENV === 'production' && !process.env.ALLOWED_ORIGINS) {
+    throw new Error('FATAL: ALLOWED_ORIGINS must be set in production');
+  }
+
   app.use(cors({
-    origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000'],
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     credentials: true,
   }));
@@ -59,7 +74,11 @@ export const createServer = async (deps: ServerDependencies): Promise<Express> =
   app.use(express.json({ limit: '10kb' }));
 
   // 3.5 Composition Root - Inject Dependencies
-  const { userRouter, productRouter, orderRouter, cartRouter } = await composeDependencies(deps.db, deps.redis, deps.kafka, deps.logger);
+  const { userRouter, productRouter, orderRouter, cartRouter, outboxRelay } = await composeDependencies(deps.db, deps.redis, deps.kafka, deps.logger);
+
+  // Start the Outbox relay sweeper — must run after composition so Kafka is connected.
+  _outboxRelay = outboxRelay;
+  outboxRelay.start();
 
   app.use('/api/v1/users', userRouter);
   app.use('/api/v1/products', productRouter);
@@ -104,6 +123,7 @@ export const startServer = (app: Express, port: number, deps: ServerDependencies
     
     server.close(async () => {
       try {
+        if (_outboxRelay) await _outboxRelay.stop();
         await deps.redis.quit();
         await deps.db.end();
         logger.info('Infrastructure connections closed successfully.');

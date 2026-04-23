@@ -169,4 +169,18 @@ export class MfaService {
       throw new Error('DB_QUERY_FAILED');
     }
   }
+
+  /**
+   * Health check utility connecting to DB and Redis
+   */
+  public async healthCheck(): Promise<boolean> {
+    try {
+      await this.redis.ping();
+      await this.db.query('SELECT 1');
+      return true;
+    } catch (e) {
+      this.logger.error({ error: e }, 'MFA Service Infrastructure health check failed');
+      return false;
+    }
+  }
 }

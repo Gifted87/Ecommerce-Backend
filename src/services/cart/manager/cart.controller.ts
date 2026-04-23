@@ -6,7 +6,7 @@ import {
   UpdateQuantitySchema, 
   RemoveItemSchema 
 } from './cart.schema';
-import Opossum = require('opossum');
+import CircuitBreaker = require('opossum');
 
 /**
  * @fileoverview CartController
@@ -18,8 +18,7 @@ export class CartController {
   constructor(
     private readonly cartService: CartService,
     private readonly logger: Logger,
-    // Use any to bypass TS namespace issue
-    private readonly breaker: any
+    private readonly breaker: InstanceType<typeof CircuitBreaker>
   ) {}
 
   /**

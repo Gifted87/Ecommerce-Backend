@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Logger } from 'pino';
-import Opossum = require('opossum');
+import CircuitBreaker = require('opossum');
 import { createHmac, timingSafeEqual } from 'crypto';
 import { Knex } from 'knex';
 
@@ -35,8 +35,7 @@ export class ServiceUnavailableError extends Error {
 }
 
 export class InventoryMutationService {
-  // Use any to bypass TS namespace issue
-  private readonly dbBreaker: any;
+  private readonly dbBreaker: InstanceType<typeof CircuitBreaker>;
   private readonly hmacSecret: string;
 
   constructor(
@@ -44,9 +43,13 @@ export class InventoryMutationService {
     private readonly logger: Logger,
     hmacSecret?: string
   ) {
-    this.hmacSecret = hmacSecret || process.env.HMAC_SECRET || 'fallback-secret';
+    const secret = hmacSecret || process.env.HMAC_SECRET;
+    if (!secret) {
+      throw new Error('HMAC_SECRET is required.');
+    }
+    this.hmacSecret = secret;
     
-    this.dbBreaker = new Opossum(async (fn: () => Promise<any>) => await fn(), {
+    this.dbBreaker = new CircuitBreaker(async (fn: () => Promise<any>) => await fn(), {
       timeout: 5000,
       errorThresholdPercentage: 30,
       resetTimeout: 10000,

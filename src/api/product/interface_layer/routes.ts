@@ -78,6 +78,7 @@ export const createProductRouter = (deps: ProductRouterDependencies): Router => 
           amount: validated.quantity,
           correlationId,
           userId: (req as any).user?.sub || 'system',
+          idempotencyKey,
         });
 
         res.status(201).json({ status: 'RESERVED', correlationId });

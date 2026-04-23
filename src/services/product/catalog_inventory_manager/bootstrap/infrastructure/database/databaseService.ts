@@ -30,7 +30,7 @@ export class DatabaseService {
   private static instance: DatabaseService;
   private readonly knexInstance: Knex;
   // Use any to bypass TS namespace issue
-  private readonly breaker: any;
+  private readonly breaker: InstanceType<typeof Opossum>;
   private readonly logger: Logger;
 
   private constructor(config: DatabaseConfig, logger: Logger) {

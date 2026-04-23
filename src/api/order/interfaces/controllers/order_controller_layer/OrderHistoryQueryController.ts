@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { Logger } from 'pino';
 import { z } from 'zod';
-import { OrderRepository } from '@/infrastructure/persistence/OrderRepository';
+import { CheckoutProcessorService } from '../../../../../services/order/checkout_processor/service/CheckoutProcessorService';
 import { PaginationQuerySchema, ValidationError, ValidationErrorCode } from '@/api/order/interfaces/validators/OrderValidator';
 import { redactOrderPII } from '@/api/order/interfaces/dtos/OrderDTOs';
 
@@ -11,7 +11,7 @@ import { redactOrderPII } from '@/api/order/interfaces/dtos/OrderDTOs';
  */
 export class OrderHistoryQueryController {
   constructor(
-    private readonly orderRepository: OrderRepository,
+    private readonly checkoutProcessor: CheckoutProcessorService,
     private readonly logger: Logger
   ) {}
 
@@ -53,13 +53,8 @@ export class OrderHistoryQueryController {
         'Fetching order history'
       );
 
-      // 2. Data Fetching via Repository
-      const orders = await this.orderRepository.findByUser(userId, {
-        page,
-        limit,
-        from: from ? new Date(from) : undefined,
-        to: to ? new Date(to) : undefined,
-      });
+      // 2. Data Fetching via Repository (Paginated)
+      const orders = await this.checkoutProcessor.listOrdersPaginated(userId, limit, page);
 
       // 3. Response Construction (Redacting PII)
       const safeOrders = orders.map(redactOrderPII);

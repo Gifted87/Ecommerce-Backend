@@ -1,5 +1,5 @@
 import { Logger } from 'pino';
-import Opossum = require('opossum');
+import CircuitBreaker = require('opossum');
 import { z } from 'zod';
 import { InventoryRepository } from './inventory_repository';
 import { InventoryCacheManager } from './InventoryCacheManager';
@@ -16,6 +16,7 @@ export const StockMutationSchema = z.object({
   amount: z.number().int().nonnegative(),
   correlationId: z.string().uuid(),
   userId: z.string().uuid(),
+  idempotencyKey: z.string().optional(),
 });
 
 /**
@@ -37,10 +38,9 @@ export type StockMutationRequest = z.infer<typeof StockMutationSchema>;
  * - **Observability**: High-resolution performance metrics and transaction tracing.
  */
 export class InventoryProcessor {
-  // Use any to bypass TS namespace issue
-  private readonly dbBreaker: any;
-  private readonly cacheBreaker: any;
-  private readonly kafkaBreaker: any;
+  private readonly dbBreaker: InstanceType<typeof CircuitBreaker>;
+  private readonly cacheBreaker: InstanceType<typeof CircuitBreaker>;
+  private readonly kafkaBreaker: InstanceType<typeof CircuitBreaker>;
 
   /**
    * @param repository - Persistent data access layer for inventory.
@@ -57,19 +57,19 @@ export class InventoryProcessor {
     this.logger = logger.child({ module: 'service/inventory-processor' });
 
     // Individual circuit breakers for fine-grained failure handling
-    this.dbBreaker = new Opossum(async (fn: () => Promise<any>) => await fn(), {
+    this.dbBreaker = new CircuitBreaker(async (fn: () => Promise<any>) => await fn(), {
       timeout: 5000,
       errorThresholdPercentage: 30,
       resetTimeout: 10000,
     });
 
-    this.cacheBreaker = new Opossum(async (fn: () => Promise<any>) => await fn(), {
+    this.cacheBreaker = new CircuitBreaker(async (fn: () => Promise<any>) => await fn(), {
       timeout: 1000,
       errorThresholdPercentage: 50,
       resetTimeout: 5000,
     });
 
-    this.kafkaBreaker = new Opossum(async (fn: () => Promise<any>) => await fn(), {
+    this.kafkaBreaker = new CircuitBreaker(async (fn: () => Promise<any>) => await fn(), {
       timeout: 2000,
       errorThresholdPercentage: 20,
       resetTimeout: 5000,
@@ -120,15 +120,31 @@ export class InventoryProcessor {
     action: 'reserve' | 'release'
   ): Promise<void> {
     const start = process.hrtime();
-    const { productId, amount, correlationId } = request;
+    const { productId, amount, correlationId, idempotencyKey } = request;
 
-    this.logger.info({ correlationId, productId, action, amount }, 'Processing stock mutation');
+    this.logger.info({ correlationId, productId, action, amount, idempotencyKey }, 'Processing stock mutation');
 
     try {
+      // 0. Idempotency Check
+      if (idempotencyKey) {
+        // Safe access to cache's underlying redis instance
+        const cacheRedis = (this.cache as any).redis as import('ioredis').Redis;
+        if (cacheRedis) {
+          const locked = await cacheRedis.set(`idempotency:inventory:${idempotencyKey}`, '1', 'EX', 86400, 'NX');
+          if (!locked) {
+            this.logger.warn({ correlationId, idempotencyKey }, 'Idempotent request bypassed');
+            return;
+          }
+        }
+      }
+
       // 1. Repository Transaction (DB Breaker)
       await this.dbBreaker.fire(async () => {
-        const adjustment = action === 'reserve' ? -amount : amount;
-        await this.repository.updateStock(productId, adjustment, correlationId);
+        if (action === 'reserve') {
+          await this.repository.reserveStock(productId, amount, correlationId);
+        } else {
+          await this.repository.releaseStock(productId, amount, correlationId);
+        }
       });
 
       // 2. Async Cache Invalidation (Cache Breaker)

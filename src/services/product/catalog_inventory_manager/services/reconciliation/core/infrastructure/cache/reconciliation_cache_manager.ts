@@ -52,8 +52,15 @@ export class ReconciliationCacheManager {
 
   async releaseSkuRange(skuRange: string, correlationId: string): Promise<void> {
     const key = `reconciliation:lock:${skuRange}`;
-    // Simplified lock release, ideally check correlationId first
-    await this.client.del(key);
+    // Use a Lua script to atomically check ownership before deleting
+    const script = `
+      if redis.call('get', KEYS[1]) == ARGV[1] then
+        return redis.call('del', KEYS[1])
+      else
+        return 0
+      end
+    `;
+    await this.client.eval(script, 1, key, correlationId);
   }
 
   /**

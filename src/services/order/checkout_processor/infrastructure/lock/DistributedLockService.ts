@@ -1,7 +1,8 @@
 import Redis from 'ioredis';
-import Opossum = require('opossum');
+import CircuitBreaker = require('opossum');
 import { randomUUID } from 'crypto';
 import { Logger } from 'pino';
+import Redlock from 'redlock';
 
 /**
  * Custom error class for Distributed Lock Service operations.
@@ -14,38 +15,49 @@ export class DistributedLockError extends Error {
 }
 
 /**
- * DistributedLockService provides a mutex locking mechanism using Redis.
- * Ensures that only one worker node can process a specific OrderID at a time.
+ * DistributedLockService provides a mutex locking mechanism using Redlock.
+ *
+ * For true split-brain safety in a Redis Cluster, supply REDIS_REDLOCK_NODES as a
+ * comma-separated list of ≥3 independent Redis primary URLs. When only one node is
+ * provided a prominent startup warning is logged — the lock will still work, but
+ * cannot survive a Redis primary failover without a window of unsafe locking.
+ *
+ * @example
+ *   REDIS_REDLOCK_NODES=redis1:6379,redis2:6379,redis3:6379
  */
 export class DistributedLockService {
   private redis: Redis;
-  // Use any to bypass TS namespace issue
-  private breaker: any;
+  private redlock: Redlock;
   private readonly DEFAULT_TTL = 5; // seconds
 
-  /**
-   * @param redisClient An initialized ioredis instance.
-   * @param logger A pino logger instance for structured logging.
-   */
   constructor(
     private redisClient: Redis,
-    private logger: Logger
+    private logger: Logger,
+    extraRedlockNodes?: Redis[]
   ) {
     this.redis = redisClient;
+    const allNodes: Redis[] = [this.redis, ...(extraRedlockNodes ?? [])];
 
-    // Circuit breaker configuration
-    const options = {
-      timeout: 3000,
-      errorThresholdPercentage: 50,
-      resetTimeout: 30000,
-    };
+    if (allNodes.length < 3) {
+      this.logger.warn(
+        { nodeCount: allNodes.length },
+        'DistributedLockService: Redlock is operating with fewer than 3 independent Redis ' +
+        'nodes. This does NOT provide consensus-based safety against split-brain locking. ' +
+        'Set REDIS_REDLOCK_NODES with ≥3 independent primaries in production.'
+      );
+    }
 
-    this.breaker = new Opossum(async (cmd: string, ...args: any[]) => {
-      return (this.redis as any)[cmd](...args);
-    }, options);
+    this.redlock = new Redlock(allNodes, {
+      driftFactor: 0.01,
+      retryCount: 5,
+      retryDelay: 200,
+      retryJitter: 200,
+      automaticExtensionThreshold: 500,
+    });
 
-    this.breaker.on('open', () => this.logger.error('DistributedLockService: Circuit breaker opened.'));
-    this.breaker.on('close', () => this.logger.info('DistributedLockService: Circuit breaker closed.'));
+    this.redlock.on('error', (error: any) => {
+      this.logger.error({ error }, 'Redlock encountered an error');
+    });
   }
 
   /**
@@ -57,75 +69,35 @@ export class DistributedLockService {
    * @returns The result of the callback.
    */
   public async withLock<T>(orderId: string, callback: () => Promise<T>): Promise<T> {
-    const lockKey = `order:lock:${orderId}`;
-    const requestId = randomUUID();
-
-    const acquired = await this.acquireLock(lockKey, requestId);
-
-    if (!acquired) {
-      throw new DistributedLockError(
-        `Could not acquire lock for order: ${orderId}`,
-        'LOCK_ACQUISITION_FAILED'
-      );
-    }
+    const lockKey = `{order-lock}:${orderId}`;
+    let lock;
 
     try {
-      this.logger.info({ orderId, requestId }, 'Lock acquired');
+      lock = await this.redlock.acquire([lockKey], this.DEFAULT_TTL * 1000);
+      this.logger.info({ orderId }, 'Lock acquired via Redlock');
       return await callback();
     } catch (error) {
-      this.logger.error({ orderId, requestId, error }, 'Error during locked operation');
+      if ((error as any).name === 'ExecutionError') {
+        throw new DistributedLockError(`Could not acquire lock for order: ${orderId}`, 'LOCK_ACQUISITION_FAILED');
+      }
+      this.logger.error({ orderId, error }, 'Error during locked operation');
       throw error;
     } finally {
-      await this.releaseLock(lockKey, requestId);
-    }
-  }
-
-  /**
-   * Attempts to acquire a Redis lock using SET NX EX.
-   */
-  private async acquireLock(key: string, requestId: string): Promise<boolean> {
-    try {
-      const result = await this.breaker.fire('set', key, requestId, 'EX', this.DEFAULT_TTL, 'NX');
-      return result === 'OK';
-    } catch (error) {
-      this.logger.error({ key, error }, 'Failed to acquire lock');
-      throw new DistributedLockError('Redis error during lock acquisition', 'REDIS_ERROR', error as Error);
-    }
-  }
-
-  /**
-   * Releases the lock only if the current requestId matches the one in Redis.
-   * Uses a Lua script to ensure atomic check-and-delete.
-   */
-  private async releaseLock(key: string, requestId: string): Promise<void> {
-    const luaScript = `
-      if redis.call("get", KEYS[1]) == ARGV[1] then
-        return redis.call("del", KEYS[1])
-      else
-        return 0
-      end
-    `;
-
-    try {
-      await this.breaker.fire('eval', luaScript, 1, key, requestId);
-      this.logger.info({ key, requestId }, 'Lock released');
-    } catch (error) {
-      this.logger.error({ key, requestId, error }, 'Failed to release lock');
-      throw new DistributedLockError('Redis error during lock release', 'REDIS_ERROR', error as Error);
+      if (lock) {
+        await lock.release().catch(err => this.logger.error({ err }, 'Failed to release Redlock'));
+      }
     }
   }
 
   /**
    * Returns current service health status.
    */
-  public async getHealth(): Promise<{ status: 'healthy' | 'unhealthy'; redis: string; circuit: string }> {
+  public async getHealth(): Promise<{ status: 'healthy' | 'unhealthy'; redis: string }> {
     const redisStatus = this.redis.status;
-    const circuitStatus = this.breaker.opened ? 'open' : 'closed';
 
     return {
-      status: redisStatus === 'ready' && circuitStatus === 'closed' ? 'healthy' : 'unhealthy',
+      status: redisStatus === 'ready' ? 'healthy' : 'unhealthy',
       redis: redisStatus,
-      circuit: circuitStatus,
     };
   }
 }

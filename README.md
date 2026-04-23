@@ -70,8 +70,9 @@ The system supports **TOTP (Time-based One-Time Password)** MFA.
 
 ### 3.4 Rate Limiting & Brute Force Protection
 We implement multi-layered rate limiting using Redis:
-*   **IP-Based**: Prevents a single source from flooding the system with requests.
 *   **Account-Based (Email)**: Prevents brute-force or credential-stuffing attacks on a specific user account.
+*   **Active Status Enforcement**: Beyond credential verification, the system enforces strict `is_active = true` lookups during every authentication attempt and token refresh, ensuring administratively suspended users are locked out immediately.
+*   **Infrastructure Identity**: Configured with `app.set('trust proxy', 1)` to ensure correct client IP unmasking behind load balancers and proxies, critical for accurate rate limiting and audit trails.
 *   **Redis Implementation**: Uses the `INCR` and `PEXPIRE` commands in a single atomic transaction (`MULTI`/`EXEC`) to track attempts within a rolling 60-second window.
 
 ---
@@ -111,7 +112,9 @@ In complex workflows like `Checkout`, if a step fails (e.g., payment succeeds bu
 ### 5.1 The Cart Module & Distributed Concurrency
 Shopping carts are high-velocity data structures. To ensure performance and consistency, we use:
 *   **Redis as Primary Store**: Carts are stored as JSON-serialized objects in Redis, keyed by `userId`.
-*   **Distributed Locking**: We implement a Redlock-style distributed lock using Redis. Before any modification (add item, update quantity), the `CartLockManager` acquires a lock for that `userId`. This ensures that even if a user sends multiple concurrent requests (e.g., clicking "Add to Cart" twice very quickly), the state remains consistent.
+*   **Distributed Locking (Redlock)**: We implement a robust distributed lock using the Redlock algorithm.
+    *   **Consensus-Based Safety**: In production, the system requires `REDIS_REDLOCK_NODES` to be configured with ≥3 independent Redis primaries to provide split-brain protection.
+    *   **Fallback Strategy**: If fewer than 3 nodes are provided, the system logs a prominent warning and falls back to single-node locking, suitable for development but not for HA failover scenarios.
 *   **Cart Merging Strategy**: When a user logs in, we merge their "guest cart" (stored in a temporary session) with their "user cart" (stored against their ID). The logic handles duplicate SKUs by summing quantities and ensuring price consistency.
 
 ### 5.2 The Product & Inventory Module
@@ -137,10 +140,10 @@ The Order module uses a **State Machine** to manage the order lifecycle.
 The inventory reservation is a critical path for ensuring we never oversell. The process follows a strict sequence:
 1.  **API Validation**: The `ProductController` receives a reservation request. It validates the `productId` and `quantity` using a Zod schema. It also checks for an `X-Idempotency-Key` to prevent double-reservation on network retries.
 2.  **Service Delegation**: The `InventoryProcessor` receives the request. It wraps the operation in three independent circuit breakers (DB, Cache, Kafka).
-3.  **Atomic DB Mutation**: Inside a Knex transaction, we perform a `SELECT FOR UPDATE` on the inventory row. This locks the row for the duration of the transaction. We check if the `available_stock` is >= `requested_quantity`. If yes, we decrement the stock.
-4.  **Transaction Commit**: Once the DB update is confirmed, the transaction commits, releasing the lock.
-5.  **Cache Invalidation**: We trigger an asynchronous delete of the `inventory:{productId}` key in Redis. This is done via a "fire-and-forget" pattern protected by its own circuit breaker. If it fails, the system remains consistent (DB is the source of truth), but performance may temporarily degrade.
-6.  **Event Emission**: We publish an `inventory.reserved` event to Kafka. This event is signed with an HMAC to ensure its authenticity when consumed by downstream systems like the Analytics or Shipping services.
+3.  **Atomic DB Mutation**: Inside a Knex transaction, we perform a `SELECT FOR UPDATE` on the inventory row. This locks the row for the duration of the transaction and ensures the check-and-decrement operation is atomic at the database level.
+4.  **Transactional Outbox**: Instead of a "dual-write" which is prone to partial failures, the event payload is written to an `outbox_events` table within the same ACID transaction as the stock decrement.
+5.  **Event Relay**: A background `OutboxRelayService` polls the outbox using `SELECT ... FOR UPDATE SKIP LOCKED` to publish events to Kafka with at-least-once delivery guarantees.
+6.  **Cache Invalidation**: After the DB confirms the mutation, we trigger a circuit-breaker protected invalidation of the `inventory:{productId}` key in Redis.
 
 ---
 
@@ -217,13 +220,17 @@ We follow strict coding standards to maintain quality:
 ## 10. Infrastructure & Operations
 
 ### 10.1 Database Management (PostgreSQL & Knex)
-We use **Knex.js** as our query builder and migration engine.
-*   **Migrations**: All schema changes are version-controlled in the `src/shared/database/migrations` directory. This ensures that every environment (Dev, Staging, Prod) has the exact same schema.
-*   **Pool Management**: We configure the `pg` pool with min/max connections and idle timeouts to optimize resource usage on the database server.
-*   **Indexes**: We use B-Tree indexes for primary and foreign keys, and GIN indexes for any JSONB fields that require searching.
+We use **Knex.js** as our sole query builder and migration engine.
+*   **Pool Consolidation**: To prevent PostgreSQL connection exhaustion, the system maintains a single global connection pool. Parallel ORMs (like Prisma) are strictly forbidden to ensure deterministic connection lifecycle management.
+*   **Migrations**: All schema changes are version-controlled in the respective module `migrations` directories. This ensures that every environment (Dev, Staging, Prod) has the exact same schema.
+*   **Indexes**: We use B-Tree indexes for primary and foreign keys, and Partial Indexes for the Outbox Pattern (targeting unprocessed events) to maximize performance.
+*   **Database-Level Pagination**: Listing APIs utilize SQL-level `LIMIT` and `OFFSET` to ensure memory safety even with millions of records.
+*   **Concurrency**: Critical row updates use `FOR UPDATE` locking to maintain integrity in distributed environments.
 
 ### 10.2 Messaging Strategy (Kafka)
-Kafka is the backbone of our **Event-Driven Architecture**.
+Kafka is the backbone of our **Event-Driven Architecture**, orchestrated via the **Transactional Outbox Pattern**.
+*   **Atomicity via Outbox**: The system avoids the "Dual-Write" anti-pattern. Domain changes and event payloads are committed in a single PostgreSQL transaction.
+*   **Outbox Relay Service**: A dedicated background process polls the `outbox_events` table and publishes to Kafka. This ensures that if the message bus is down, events are safely stored and retried until delivery is confirmed.
 *   **Idempotent Producers**: Our Kafka producers are configured for idempotency, ensuring that even in the case of network retries, a message is never duplicated on the broker.
 *   **Consumer Groups**: Services are organized into consumer groups, allowing for horizontal scaling of message processing.
 *   **Correlation IDs**: Every Kafka message header includes a `correlationId`, allowing us to trace a single user request across multiple asynchronous services.

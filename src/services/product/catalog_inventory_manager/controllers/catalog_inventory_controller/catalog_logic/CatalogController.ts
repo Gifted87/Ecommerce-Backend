@@ -40,28 +40,12 @@ export class CatalogController {
     }
 
     try {
-      // 1. Check Redis Cache
-      const cachedProduct = await this.redis.get(`product:${sku}`);
-      if (cachedProduct) {
-        this.logger.debug({ sku, correlationId }, 'Cache hit');
-        res.status(200).json(JSON.parse(cachedProduct));
-        return;
-      }
-
-      // 2. Cache Miss: Fetch from Service
-      this.logger.debug({ sku, correlationId }, 'Cache miss, fetching from source');
-      // Note: CatalogService has getProductBySku instead of getBySku
       const product = await this.catalogService.getProductBySku(sku, correlationId);
 
       if (!product) {
         res.status(404).json({ error: 'Product not found' });
         return;
       }
-
-      // 3. Populate Cache Asynchronously
-      this.redis.set(`product:${sku}`, JSON.stringify(product), 'EX', 3600).catch((err) =>
-        this.logger.error({ err, sku, correlationId }, 'Failed to warm cache')
-      );
 
       res.status(200).json(product);
     } catch (error: any) {
@@ -78,9 +62,7 @@ export class CatalogController {
 
     try {
       const validatedData = ProductSchema.omit({ id: true, created_at: true, updated_at: true }).parse(req.body);
-      // Note: CatalogService doesn't have createProduct, it should probably call repository directly or service needs to be updated.
-      // For now, I'll assume it exists or needs to be added to service.
-      const product = await (this.catalogService as any).createProduct(validatedData);
+      const product = await this.catalogService.createProduct(validatedData as any);
       
       res.status(201).json(product);
     } catch (error: any) {
@@ -102,7 +84,7 @@ export class CatalogController {
 
     try {
       const validatedData = ProductSchema.partial().parse(req.body);
-      const product = await (this.catalogService as any).updateProduct(id, validatedData);
+      const product = await this.catalogService.updateProduct(id, validatedData);
 
       // Invalidate cache on update
       await this.redis.del(`product:${product.sku}`);

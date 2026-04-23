@@ -9,23 +9,23 @@ import {
   UserUpdate 
 } from '../types';
 
+import { IUserRepository } from './user.repository';
+
 /**
  * UserService handles the core business logic for user management within the system.
  * 
  * It manages user registration, profile retrieval, and updates, ensuring that
  * all password operations are handled securely through the SecurityService
- * and that data integrity is maintained in the PostgreSQL database.
+ * and that data integrity is maintained through the UserRepository.
  */
 export class UserService {
-  private readonly tableName = 'users';
-
   /**
-   * @param db - The PostgreSQL connection pool.
+   * @param userRepository - The data access object for users.
    * @param securityService - Service for hashing and verifying passwords.
    * @param logger - The application's pino logger instance.
    */
   constructor(
-    private readonly db: Pool,
+    private readonly userRepository: IUserRepository,
     private readonly securityService: SecurityService,
     private readonly logger: Logger
   ) {}
@@ -61,36 +61,13 @@ export class UserService {
 
     const validated = UserModelSchema.parse(user);
 
-    const query = `
-      INSERT INTO ${this.tableName} (
-        user_id, email, password_hash, first_name, last_name, roles, is_active, mfa_enabled, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING *
-    `;
-
     try {
-      const result = await this.db.query(query, [
-        validated.user_id,
-        validated.email,
-        validated.password_hash,
-        validated.first_name,
-        validated.last_name,
-        JSON.stringify(validated.roles),
-        validated.is_active,
-        validated.mfa_enabled,
-        validated.created_at,
-        validated.updated_at,
-      ]);
-
-      if (result.rows.length === 0) {
-        throw new Error('USER_REGISTRATION_FAILED: NO_DATA_RETURNED');
-      }
-
+      const createdUser = await this.userRepository.createUser(validated);
       this.logger.info({ userId: validated.user_id }, 'User registered successfully');
-      return this.mapRowToModel(result.rows[0]);
+      return createdUser;
     } catch (error: any) {
       this.logger.error({ error: error.message, email: data.email }, 'Failed to register user');
-      if (error.code === '23505') {
+      if (error.code === '23505' || error.message.includes('23505')) {
           throw new Error('USER_ALREADY_EXISTS');
       }
       throw new Error('USER_REGISTRATION_FAILED');
@@ -105,11 +82,9 @@ export class UserService {
    * @throws Error (USER_FETCH_FAILED) if the database query fails.
    */
   async findById(userId: string): Promise<UserModel | null> {
-    const query = `SELECT * FROM ${this.tableName} WHERE user_id = $1`;
     try {
-      const result = await this.db.query(query, [userId]);
-      if (result.rows.length === 0) return null;
-      return this.mapRowToModel(result.rows[0]);
+      const result = await this.userRepository.findById(userId);
+      return result;
     } catch (error) {
       this.logger.error({ error, userId }, 'Failed to fetch user by ID');
       throw new Error('USER_FETCH_FAILED');
@@ -128,66 +103,22 @@ export class UserService {
    * @throws Error (USER_UPDATE_FAILED) if the update operation fails.
    */
   async updateProfile(userId: string, data: UserUpdate): Promise<UserModel> {
-    const fields: string[] = [];
-    const values: any[] = [];
-    let idx = 1;
-
-    if (data.first_name) {
-      fields.push(`first_name = $${idx++}`);
-      values.push(data.first_name);
-    }
-    if (data.last_name) {
-      fields.push(`last_name = $${idx++}`);
-      values.push(data.last_name);
-    }
-    if (data.email) {
-      fields.push(`email = $${idx++}`);
-      values.push(data.email);
-    }
-
-    if (fields.length === 0) {
-      const user = await this.findById(userId);
-      if (!user) throw new Error('USER_NOT_FOUND');
-      return user;
-    }
-
-    fields.push(`updated_at = $${idx++}`);
-    values.push(new Date().toISOString());
-    values.push(userId);
-
-    const query = `
-      UPDATE ${this.tableName}
-      SET ${fields.join(', ')}
-      WHERE user_id = $${idx}
-      RETURNING *
-    `;
-
     try {
-      const result = await this.db.query(query, values);
-      if (result.rows.length === 0) throw new Error('USER_NOT_FOUND');
-      
+      if (!data.first_name && !data.last_name && !data.email) {
+        const user = await this.findById(userId);
+        if (!user) throw new Error('USER_NOT_FOUND');
+        return user;
+      }
+
+      const updatedUser = await this.userRepository.updateUser(userId, data);
       this.logger.info({ userId }, 'User profile updated');
-      return this.mapRowToModel(result.rows[0]);
-    } catch (error) {
+      return updatedUser;
+    } catch (error: any) {
       this.logger.error({ error, userId }, 'Failed to update user profile');
+      if (error.message === 'NOT_FOUND') {
+        throw new Error('USER_NOT_FOUND');
+      }
       throw new Error('USER_UPDATE_FAILED');
     }
-  }
-
-  /**
-   * Maps a raw database row to the UserModel structure.
-   * 
-   * Handles JSON parsing for fields stored as strings in the database (e.g., roles).
-   * 
-   * @param row - The raw result row from the pg query.
-   * @returns The mapped UserModel object.
-   * @private
-   */
-  private mapRowToModel(row: any): UserModel {
-    if (!row) throw new Error('MAPPING_FAILED: NO_ROW');
-    return {
-      ...row,
-      roles: typeof row.roles === 'string' ? JSON.parse(row.roles) : row.roles,
-    };
   }
 }

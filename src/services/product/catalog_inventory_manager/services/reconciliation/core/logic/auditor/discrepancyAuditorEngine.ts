@@ -39,7 +39,20 @@ export class DiscrepancyAuditorEngine {
       
       for (const row of dbInventory) {
         const inventory = InventorySnapshotSchema.parse(row);
-        // ... auditing logic ...
+        
+        // Audit validation against business invariants
+        const availableStock = inventory.total_stock - inventory.reserved_stock;
+        if (availableStock < 0) {
+          this.logger.warn({ sku: inventory.sku, availableStock, correlationId }, 'Negative inventory detected (Violation of constraints)');
+          
+          await this.kafkaBreaker.fire(() => this.kafka.publish('inventory-discrepancies', inventory.sku, {
+            sku: inventory.sku,
+            reason: 'NEGATIVE_INVENTORY',
+            measured_quantity: availableStock,
+            audited_at: new Date().toISOString(),
+            correlationId
+          }));
+        }
       }
       
       this.logger.info({ correlationId }, 'Audit complete');

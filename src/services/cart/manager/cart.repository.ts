@@ -27,7 +27,7 @@ export class CartRepository {
   private static instance: CartRepository;
   private readonly redis: Redis;
   // Use any to bypass TS namespace issue
-  private readonly breaker: any;
+  private readonly breaker: InstanceType<typeof Opossum>;
   private readonly logger: Logger;
   private readonly CART_TTL = 86400; // 24 hours
 

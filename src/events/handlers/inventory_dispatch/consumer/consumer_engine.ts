@@ -121,7 +121,7 @@ export class ConsumerEngine {
     
     // Concurrency Control (Distributed Locking)
     const lockKey = `lock:inventory:${event.sku}`;
-    const acquired = await this.redis.set(lockKey, event.traceId, 'PX', 5000, 'NX');
+    const acquired = await this.redis.set(lockKey, event.traceId, 'PX', 30000, 'NX');
     if (!acquired) {
       throw new Error(`Contention: Could not acquire lock for SKU ${event.sku}`);
     }

@@ -13,8 +13,10 @@ import { OrderTransitionEngine } from '../logic/OrderTransitionEngine';
  */
 export interface IOrderRepository {
   findById(orderId: string): Promise<OrderModel | null>;
-  updateStatus(orderId: string, status: OrderStatus, trackingNumber?: string): Promise<OrderModel>;
-  runInTransaction<T>(callback: () => Promise<T>): Promise<T>;
+  listByUserId(userId: string): Promise<OrderModel[]>;
+  listPaginated(userId: string, limit: number, offset: number): Promise<OrderModel[]>;
+  updateStatus(orderId: string, status: OrderStatus, trackingNumber?: string, trx?: any): Promise<OrderModel>;
+  runInTransaction<T>(callback: (trx: any) => Promise<T>): Promise<T>;
 }
 
 /**
@@ -32,8 +34,7 @@ export class OrderStateError extends Error {
  * It ensures ACID compliance, atomicity via locking, and event consistency.
  */
 export class OrderStateManager {
-  // Use any to bypass TS namespace issue
-  private readonly breaker: any;
+  private readonly breaker: InstanceType<typeof Opossum>;
 
   constructor(
     private readonly repository: IOrderRepository,
@@ -59,13 +60,16 @@ export class OrderStateManager {
     return await this.repository.findById(orderId);
   }
 
-  /**
-   * Lists orders for a specific user.
-   */
   public async listOrdersByUserId(userId: string): Promise<OrderModel[]> {
-    // Cast repository to any if listByUserId is not in the interface but exists in the implementation
-    // However, I updated the implementation, so I'll cast it here
-    return await (this.repository as any).listByUserId(userId);
+    return await this.repository.listByUserId(userId);
+  }
+
+  /**
+   * Lists paginated orders for a specific user.
+   */
+  public async listOrdersPaginated(userId: string, limit: number, page: number): Promise<OrderModel[]> {
+    const offset = (page - 1) * limit;
+    return await this.repository.listPaginated(userId, limit, offset);
   }
 
   /**
@@ -110,23 +114,25 @@ export class OrderStateManager {
         return order;
       }
 
-      // 3. Mutate DB and Publish Event in Transaction
-      return await this.repository.runInTransaction(async () => {
+      // 3. Mutate DB and Publish Event via Outbox in Transaction
+      return await this.repository.runInTransaction(async (trx: any) => {
         const updatedOrder = await this.repository.updateStatus(
           orderId,
           targetStatus,
-          metadata?.tracking_number
+          metadata?.tracking_number,
+          trx
         );
 
-        try {
-          await this.eventProducer.publishOrderUpdated(updatedOrder);
-        } catch (eventError) {
-          this.logger.error({ orderId, error: eventError }, 'Failed to publish event, rolling back transaction');
-          // Re-throw to trigger transaction rollback if critical
-          throw new OrderStateError('Event publication failed, rolling back', 'TRANSACTION_ROLLBACK');
-        }
+        // Outbox Pattern: Commit atomic event payload to the same DB
+        await trx('outbox_events').insert({
+          aggregate_id: orderId,
+          aggregate_type: 'Order',
+          event_type: 'OrderUpdated',
+          payload: JSON.stringify(updatedOrder),
+          created_at: new Date()
+        });
 
-        this.logger.info({ orderId, prevStatus: order.status, newStatus: targetStatus }, 'Order status updated successfully');
+        this.logger.info({ orderId, prevStatus: order.status, newStatus: targetStatus }, 'Order status and outbox updated successfully');
         return updatedOrder;
       });
     });

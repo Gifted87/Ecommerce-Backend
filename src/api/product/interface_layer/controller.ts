@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { Logger } from 'pino';
 import type { CircuitBreaker } from 'opossum';
 import { InventoryRepository, InsufficientStockError, InventoryRepositoryError } from '@/domain/inventory/repository';
-import { InventoryCacheManager } from '@/infrastructure/cache/redis';
+
 
 /**
  * Validation schemas for catalog browsing.
@@ -31,7 +31,7 @@ export class ProductCatalogAndInventoryController {
 
   constructor(
     private readonly inventoryRepository: InventoryRepository,
-    private readonly cacheManager: InventoryCacheManager,
+
     private readonly logger: Logger
   ) {
     this.logger = logger.child({ module: 'ProductCatalogAndInventoryController' });
@@ -59,24 +59,9 @@ export class ProductCatalogAndInventoryController {
     
     try {
       const { page, limit } = PaginationSchema.parse(req.query);
-      const cacheKey = `products_page_${page}_limit_${limit}`;
-
-      // Try Cache
-      const cached = await this.cacheManager.get(cacheKey, { correlationId: requestId });
-      if (cached) {
-        res.json(cached);
-        return;
-      }
-
-      // Fetch from Repository
       const products = await this.catalogBreaker.fire(async () => {
         return await this.inventoryRepository.findAllPaginated(page, limit);
       });
-
-      // Async Cache Populate
-      this.cacheManager.set(cacheKey, products, { correlationId: requestId }, 300).catch(err => 
-        log.error({ err }, 'Background cache population failed')
-      );
 
       res.json(products);
     } catch (err: any) {
@@ -100,20 +85,9 @@ export class ProductCatalogAndInventoryController {
     try {
       const { productId, quantity } = ReservationSchema.parse(req.body);
 
-      // Check Idempotency
-      const cachedResult = await this.cacheManager.get(`idempotency_${idempotencyKey}`, { correlationId: requestId });
-      if (cachedResult) {
-        res.json(cachedResult);
-        return;
-      }
-
-      // Execute Reservation
       const reservation = await this.inventoryBreaker.fire(async () => {
         return await this.inventoryRepository.reserveStock(productId, quantity);
       });
-
-      // Persist Idempotency
-      await this.cacheManager.set(`idempotency_${idempotencyKey}`, reservation, { correlationId: requestId }, 86400);
 
       res.status(201).json(reservation);
     } catch (err: any) {

@@ -1,5 +1,9 @@
 require("dotenv").config();
 
+if (process.env.NODE_ENV === 'production' && (!process.env.DB_HOST || process.env.DB_PASSWORD === 'postgres')) {
+  throw new Error('FATAL: Production database credentials cannot use default or missing values.');
+}
+
 module.exports = {
   development: {
     client: "postgresql",
